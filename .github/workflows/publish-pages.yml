@@ -12,6 +12,7 @@ env:
   SIS_SITE_URL: ${{ vars.PAGES_SITE_URL || 'https://wesley-yon.github.io/super-investor-seeker-site/' }}
   SIS_STAGING: ${{ vars.PRODUCTION_ENABLED != 'true' }}
   SIS_EXPLICIT_PIN: ${{ inputs.implementation_pin != '' }}
+  SIS_ALLOW_OLDER_RELEASE: ${{ inputs.allow_older_release == true }}
 jobs:
   implementation:
     if: ${{ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
@@ -527,6 +528,10 @@ jobs:
         type: string
         required: false
         default: ''
+      allow_older_release:
+        type: boolean
+        required: false
+        default: false
     outputs:
       page_url:
         value: ${{ jobs.deploy.outputs.page_url }}
