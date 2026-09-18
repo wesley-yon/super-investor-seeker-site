@@ -110,6 +110,10 @@ jobs:
     - main
   schedule:
   - cron: 7,22,37,52 * * * *
+concurrency:
+  group: pages-publication-controller
+  cancel-in-progress: false
+  queue: max
 env:
   SIS_PUBLISHER_SHA: ${{ github.sha }}
   SIS_PUBLISHER_REPOSITORY: ${{ github.repository }}
