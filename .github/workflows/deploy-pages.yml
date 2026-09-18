@@ -45,6 +45,8 @@ jobs:
       release_tag: ${{ inputs.release_tag || '' }}
       dataset_id: ${{ inputs.dataset_id || '' }}
       implementation_pin: ${{ needs.implementation.outputs.pin }}
+      allow_older_release: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' && inputs.implementation_pin
+        == '' }}
     secrets: inherit
     permissions:
       actions: write
