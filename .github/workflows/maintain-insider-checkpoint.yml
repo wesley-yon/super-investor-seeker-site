@@ -1,0 +1,181 @@
+name: Maintain private insider checkpoint
+permissions:
+  contents: read
+concurrency:
+  group: insider-checkpoint-maintenance
+  cancel-in-progress: false
+jobs:
+  implementation:
+    if: ${{ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+      }}
+    runs-on: ubuntu-latest
+    environment: private-data
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      pin: ${{ steps.target.outputs.pin }}
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Pin implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode resolve --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ''
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: target
+  maintain:
+    if: ${{ (github.ref == 'refs/heads/main' && github.event.repository.private == false) && github.ref == 'refs/heads/main'
+      && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    environment: private-data
+    timeout-minutes: 45
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Fetch pinned implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode fetch --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+    - name: Set up Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      with:
+        python-version: '3.11'
+    - name: Execute private step 3
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step maintain-insider-checkpoint.maintain.2
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Authenticate for private archive reads
+      id: archive-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: read
+    - name: Execute private step 5
+      id: prepared
+      env:
+        GH_TOKEN: ${{ steps.archive-reader.outputs.token }}
+        SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        INSIDER_RELEASE_TAG: ${{ inputs.release_tag }}
+        INSIDER_TRANSPORT_SHA256: ${{ inputs.transport_sha256 }}
+        INSIDER_DOCUMENT_INDEX_SHA256: ${{ inputs.document_index_sha256 }}
+        INSIDER_THROUGH: ${{ inputs.through }}
+        INSIDER_COLLECTION_START: ${{ inputs.collection_start }}
+        INSIDER_MAX_FILINGS: ${{ inputs.max_filings }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step maintain-insider-checkpoint.maintain.4
+    - name: Authenticate for verified private archive publication
+      id: archive-writer
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Execute private step 7
+      env:
+        GH_TOKEN: ${{ steps.archive-writer.outputs.token }}
+        INSIDER_PREPARED_SHA256: ${{ steps.prepared.outputs.prepared_sha256 }}
+        INSIDER_BUCKET_TAG: ${{ inputs.archive_bucket_tag }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step maintain-insider-checkpoint.maintain.6
+    - name: Execute private step 8
+      env:
+        INSIDER_REPORT: ${{ runner.temp }}/insider-maintenance/maintenance-publication.json
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step maintain-insider-checkpoint.maintain.7
+    - name: Authorize private report storage
+      if: ${{ always() }}
+      id: private-report-writer
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Retain diagnostics privately
+      if: ${{ always() && steps.private-report-writer.outcome == 'success' }}
+      env:
+        GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
+      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
+        fi
+    needs:
+    - implementation
+'on':
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Exact published parent insider archive bucket in the private data repository
+        required: true
+        type: string
+      transport_sha256:
+        description: Pinned parent incremental transport descriptor SHA-256
+        required: true
+        type: string
+      document_index_sha256:
+        description: Pinned complete parent document index SHA-256
+        required: true
+        type: string
+      archive_bucket_tag:
+        description: Explicit destination insider-archives-YYYYMM-NNN bucket; new buckets remain private drafts
+        required: true
+        type: string
+      through:
+        description: Optional final filing date; defaults to yesterday in New York
+        required: false
+        type: string
+      collection_start:
+        description: Optional earliest filing date for this bounded collection; defaults to the full inventory start
+        required: false
+        type: string
+      max_filings:
+        description: Maximum selected filings and attempts in this run (1 through 1000)
+        required: true
+        default: 250
+        type: number
+env:
+  SIS_PUBLISHER_SHA: ${{ github.sha }}
+  SIS_PUBLISHER_REPOSITORY: ${{ github.repository }}
+  SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+    }}
+  SIS_SITE_URL: ${{ vars.PAGES_SITE_URL || 'https://wesley-yon.github.io/super-investor-seeker-site/' }}
+  SIS_STAGING: ${{ vars.PRODUCTION_ENABLED != 'true' }}
+  SIS_EXPLICIT_PIN: 'false'

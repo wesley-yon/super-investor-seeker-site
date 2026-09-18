@@ -1,0 +1,118 @@
+name: Deploy validated data to Pages
+permissions:
+  contents: read
+jobs:
+  implementation:
+    if: ${{ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+      }}
+    runs-on: ubuntu-latest
+    environment: private-data
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      pin: ${{ steps.target.outputs.pin }}
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Pin implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode resolve --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ${{ inputs.implementation_pin || '' }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: target
+  publish:
+    if: ${{ (github.ref == 'refs/heads/main') && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' ||
+      github.event_name == 'workflow_dispatch') }}
+    uses: ./.github/workflows/publish-pages.yml
+    with:
+      release_tag: ${{ inputs.release_tag || '' }}
+      dataset_id: ${{ inputs.dataset_id || '' }}
+      implementation_pin: ${{ needs.implementation.outputs.pin }}
+    secrets: inherit
+    permissions:
+      actions: write
+      contents: read
+      deployments: read
+      pages: write
+      id-token: write
+    needs:
+    - implementation
+  finalize-private-snapshots:
+    needs:
+    - implementation
+    - publish
+    if: "${{ (github.ref == 'refs/heads/main' && needs.publish.result == 'success' &&\n    needs.publish.outputs.deployment_id\
+      \ != '') && vars.PRODUCTION_ENABLED == 'true' }}"
+    concurrency:
+      group: private-release-publication
+      cancel-in-progress: false
+      queue: max
+    uses: ./.github/workflows/finalize-private-snapshots.yml
+    with:
+      release_tag: ${{ needs.publish.outputs.release_tag }}
+      dataset_id: ${{ needs.publish.outputs.dataset_id }}
+      resolved_latest_release_tag: ${{ needs.publish.outputs.resolved_latest_release_tag }}
+      allow_older_release: ${{ needs.publish.outputs.allow_older_release }}
+      deployment_id: ${{ needs.publish.outputs.deployment_id }}
+      implementation_pin: ${{ needs.implementation.outputs.pin }}
+    secrets: inherit
+    permissions:
+      contents: read
+      deployments: read
+      pages: read
+'on':
+  workflow_call:
+    inputs:
+      implementation_pin:
+        type: string
+        required: false
+        default: ''
+      release_tag:
+        description: Exact private dataset release to publish
+        required: true
+        type: string
+      dataset_id:
+        description: Exact private dataset digest to publish
+        required: true
+        type: string
+    outputs:
+      page_url:
+        description: URL returned by the completed Pages deployment
+        value: ${{ jobs.publish.outputs.page_url }}
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Private dataset release for rollback; blank uses latest
+        required: false
+        default: ''
+        type: string
+  push:
+    branches:
+    - main
+  schedule:
+  - cron: 7,22,37,52 * * * *
+env:
+  SIS_PUBLISHER_SHA: ${{ github.sha }}
+  SIS_PUBLISHER_REPOSITORY: ${{ github.repository }}
+  SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+    }}
+  SIS_SITE_URL: ${{ vars.PAGES_SITE_URL || 'https://wesley-yon.github.io/super-investor-seeker-site/' }}
+  SIS_STAGING: ${{ vars.PRODUCTION_ENABLED != 'true' }}
+  SIS_EXPLICIT_PIN: ${{ inputs.implementation_pin != '' }}

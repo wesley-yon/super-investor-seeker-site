@@ -1,0 +1,40 @@
+name: Keep scheduled workflows active
+permissions:
+  contents: read
+concurrency:
+  group: automation-keepalive
+  cancel-in-progress: false
+jobs:
+  keepalive:
+    if: github.ref == 'refs/heads/main' && vars.PRODUCTION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout repository metadata
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        ref: main
+        fetch-depth: 1
+        token: ${{ github.token }}
+    - name: Add an empty commit to the dedicated keepalive branch
+      env:
+        KEEPALIVE_BRANCH: automation-keepalive
+        GH_TOKEN: ${{ github.token }}
+      run: "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader\n\
+        export GIT_CONFIG_VALUE_0=\"AUTHORIZATION: basic $(printf 'x-access-token:%s'\
+        \ \"$GH_TOKEN\" | base64 -w0)\"\nset -euo pipefail\ngit config user.name \"\
+        github-actions[bot]\"\ngit config user.email \"41898282+github-actions[bot]@users.noreply.github.com\"\
+        \n\nif git ls-remote --exit-code --heads origin \"$KEEPALIVE_BRANCH\" >/dev/null;\
+        \ then\n  git fetch --depth=1 origin \"$KEEPALIVE_BRANCH\"\n  git switch --detach\
+        \ FETCH_HEAD\nelse\n  # An empty orphan branch cannot contain workflow definitions,\
+        \ so\n  # the GITHUB_TOKEN push cannot alter main or start another run.\n\
+        \  git switch --orphan \"$KEEPALIVE_BRANCH\"\n  git rm -rf --ignore-unmatch\
+        \ .\nfi\n\ngit commit --allow-empty -m \"chore: keep scheduled workflows active\"\
+        \ngit push origin \"HEAD:refs/heads/$KEEPALIVE_BRANCH\"\n"
+'on':
+  schedule:
+  - cron: 37 5 1,15 * *
+  workflow_dispatch: null

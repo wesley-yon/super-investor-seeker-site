@@ -1,0 +1,390 @@
+name: Update 13F Data
+concurrency:
+  group: data-maintenance
+  cancel-in-progress: false
+  queue: max
+permissions:
+  contents: read
+  deployments: read
+  pages: read
+env:
+  DATA_REPOSITORY: ${{ github.repository_owner }}/super-investor-seeker-data
+  SIS_PUBLISHER_SHA: ${{ github.sha }}
+  SIS_PUBLISHER_REPOSITORY: ${{ github.repository }}
+  SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+    }}
+  SIS_SITE_URL: ${{ vars.PAGES_SITE_URL || 'https://wesley-yon.github.io/super-investor-seeker-site/' }}
+  SIS_STAGING: ${{ vars.PRODUCTION_ENABLED != 'true' }}
+  SIS_EXPLICIT_PIN: 'false'
+jobs:
+  implementation:
+    if: ${{ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+      }}
+    runs-on: ubuntu-latest
+    environment: private-data
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      pin: ${{ steps.target.outputs.pin }}
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Pin implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode resolve --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ''
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: target
+  filing-window:
+    runs-on: ubuntu-latest
+    outputs:
+      run_update: ${{ steps.window.outputs.run_update }}
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Fetch pinned implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode fetch --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+    - name: Execute private step 1
+      id: window
+      env:
+        SIS_EVENT_NAME: ${{ github.event_name }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.filing-window.0
+    - name: Authorize private report storage
+      if: ${{ always() }}
+      id: private-report-writer
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Retain diagnostics privately
+      if: ${{ always() && steps.private-report-writer.outcome == 'success' }}
+      env:
+        GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
+      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
+        fi
+    needs:
+    - implementation
+    if: ${{ (true) && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+      }}
+    environment: private-data
+  update:
+    needs:
+    - implementation
+    - filing-window
+    if: ${{ (github.ref == 'refs/heads/main' && needs.filing-window.outputs.run_update == 'true') && github.ref == 'refs/heads/main'
+      && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    environment: private-data
+    permissions:
+      actions: write
+      contents: read
+      deployments: read
+      pages: read
+    concurrency:
+      group: private-release-publication
+      cancel-in-progress: false
+      queue: max
+    outputs:
+      implementation_pin: ${{ needs.implementation.outputs.pin }}
+      release_tag: ${{ steps.publish_snapshot.outputs.release_tag }}
+      dataset_id: ${{ steps.publish_snapshot.outputs.dataset_id }}
+      site_changed: ${{ steps.publish_snapshot.outputs.site_changed }}
+    timeout-minutes: 360
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Fetch pinned implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode fetch --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+    - name: Authenticate to the private data repository
+      id: data-app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: read
+    - name: Set up Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      with:
+        python-version: '3.11'
+    - name: Execute private step 4
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.3
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 5
+      id: restore_snapshot
+      env:
+        DATA_ARCHIVE_TOKEN: ${{ steps.data-app-token.outputs.token }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.4
+    - name: Execute private step 6
+      env:
+        DATA_ARCHIVE_TOKEN: ${{ steps.data-app-token.outputs.token }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.5
+    - name: Execute private step 7
+      if: steps.restore_snapshot.outputs.legacy_snapshot != 'true'
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.6
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 8
+      if: steps.restore_snapshot.outputs.legacy_snapshot != 'true'
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.7
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 9
+      if: steps.restore_snapshot.outputs.legacy_snapshot != 'true'
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.8
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 10
+      env:
+        SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.9
+    - name: Execute private step 12
+      if: steps.restore_snapshot.outputs.legacy_snapshot != 'true'
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.11
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 13
+      id: pipeline
+      if: steps.restore_snapshot.outputs.legacy_snapshot != 'true'
+      timeout-minutes: 240
+      env:
+        SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        REPAIR_AMENDMENTS: ${{ inputs.repair_amendments || 'false' }}
+        FILING_QUARTERS: ${{ inputs.filing_quarters || 4 }}
+        FILING_CIK: ${{ inputs.filing_cik || '' }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.12
+    - name: Execute private step 14
+      id: recent_filings
+      if: steps.restore_snapshot.outputs.legacy_snapshot != 'true' && steps.pipeline.outputs.migration_only != 'true' && steps.pipeline.outputs.targeted_cik
+        != 'true'
+      timeout-minutes: 20
+      env:
+        SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        RECENT_13F_QUARTERS: ${{ inputs.filing_quarters || 4 }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.13
+    - name: Execute private step 15
+      if: steps.restore_snapshot.outputs.legacy_snapshot == 'true'
+      timeout-minutes: 280
+      env:
+        SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.14
+    - name: Execute private step 16
+      id: clean_checkpoint
+      if: always() && steps.restore_snapshot.outputs.legacy_snapshot == 'true'
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.15
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 18
+      if: success() && steps.restore_snapshot.outputs.legacy_snapshot == 'true'
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.17
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 19
+      id: regenerate
+      if: steps.restore_snapshot.outputs.legacy_snapshot != 'true'
+      timeout-minutes: 90
+      env:
+        SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        FULL_REBUILD: ${{ inputs.full_rebuild || false }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.18
+    - name: Execute private step 20
+      id: validate_data
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.19
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 21
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.20
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 22
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.21
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 23
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.22
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 24
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.23
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 25
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.24
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 26
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.25
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 27
+      if: always()
+      continue-on-error: true
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.26
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Refresh private data publication credential
+      id: publish-data-app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Authorize private implementation read
+      id: implementation-refresh-28
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Execute private step 29
+      id: publish_snapshot
+      env:
+        DATA_ARCHIVE_TOKEN: ${{ steps.publish-data-app-token.outputs.token }}
+        BASE_DATASET_ID: ${{ steps.restore_snapshot.outputs.dataset_id }}
+        GH_TOKEN: ${{ steps.publish-data-app-token.outputs.token }}
+        PUBLIC_GITHUB_TOKEN: ${{ github.token }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-28.outputs.token || steps.implementation-reader.outputs.token
+          }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.28
+    - name: Execute private step 30
+      if: success() && steps.publish_snapshot.outputs.dataset_id != '' && steps.recent_filings.outputs.processed_accessions
+        != '' && steps.recent_filings.outputs.processed_accessions != '0' && steps.recent_filings.outputs.remaining_due !=
+        '' && steps.recent_filings.outputs.remaining_due != '0'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-28.outputs.token || steps.implementation-reader.outputs.token
+          }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.29
+    - name: Authorize private report storage
+      if: ${{ always() }}
+      id: private-report-writer
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Retain diagnostics privately
+      if: ${{ always() && steps.private-report-writer.outcome == 'success' }}
+      env:
+        GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
+      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
+        fi
+  deploy-pages:
+    needs:
+    - implementation
+    - update
+    if: "${{ (needs.update.result == 'success' &&\n    needs.update.outputs.implementation_pin != '' &&\n    needs.update.outputs.release_tag\
+      \ != '' &&\n    needs.update.outputs.dataset_id != '' &&\n    needs.update.outputs.site_changed == 'true') && github.ref\
+      \ == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch') }}"
+    uses: ./.github/workflows/deploy-pages.yml
+    with:
+      release_tag: ${{ needs.update.outputs.release_tag }}
+      dataset_id: ${{ needs.update.outputs.dataset_id }}
+      implementation_pin: ${{ needs.implementation.outputs.pin }}
+    secrets: inherit
+    permissions:
+      actions: write
+      contents: read
+      deployments: read
+      pages: write
+      id-token: write
+'on':
+  schedule:
+  - cron: 23 11-23 * * 1-5
+  workflow_dispatch:
+    inputs:
+      full_rebuild:
+        description: Ignore selective rebuild caches and regenerate every derived output
+        required: false
+        default: false
+        type: boolean
+      repair_amendments:
+        description: Rebuild every retained quarter affected by a 13F amendment
+        required: false
+        default: false
+        type: boolean
+      filing_quarters:
+        description: Filing quarters to inspect for a targeted replay or repair
+        required: false
+        default: 4
+        type: number
+      filing_cik:
+        description: Exact SEC CIK to force-replay instead of running the broad ingest
+        required: false
+        default: ''
+        type: string

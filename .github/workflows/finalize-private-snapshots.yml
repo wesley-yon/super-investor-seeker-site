@@ -1,0 +1,144 @@
+name: Finalize verified private snapshots
+concurrency:
+  group: pages-production
+  cancel-in-progress: false
+  queue: max
+env:
+  DATA_REPOSITORY: ${{ github.repository_owner }}/super-investor-seeker-data
+  SIS_PUBLISHER_SHA: ${{ github.sha }}
+  SIS_PUBLISHER_REPOSITORY: ${{ github.repository }}
+  SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+    }}
+  SIS_SITE_URL: ${{ vars.PAGES_SITE_URL || 'https://wesley-yon.github.io/super-investor-seeker-site/' }}
+  SIS_STAGING: ${{ vars.PRODUCTION_ENABLED != 'true' }}
+  SIS_EXPLICIT_PIN: ${{ inputs.implementation_pin != '' }}
+jobs:
+  implementation:
+    if: ${{ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+      }}
+    runs-on: ubuntu-latest
+    environment: private-data
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      pin: ${{ steps.target.outputs.pin }}
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Pin implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode resolve --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ${{ inputs.implementation_pin || '' }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: target
+  finalize-private-snapshots:
+    environment: private-data
+    if: ${{ (github.ref == 'refs/heads/main') && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' ||
+      github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: read
+      pages: read
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Fetch pinned implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode fetch --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+    - name: Authenticate to the private data repository
+      id: data-app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Execute private step 3
+      env:
+        ALLOW_OLDER_RELEASE: ${{ inputs.allow_older_release }}
+        EXPECTED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        EXPECTED_DATASET_ID: ${{ inputs.dataset_id }}
+        EXPECTED_RELEASE_TAG: ${{ inputs.release_tag }}
+        EXPECTED_PREVIOUS_LATEST_RELEASE_TAG: ${{ inputs.resolved_latest_release_tag }}
+        GH_TOKEN: ${{ steps.data-app-token.outputs.token }}
+        PUBLIC_GITHUB_TOKEN: ${{ github.token }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step finalize-private-snapshots.finalize-private-snapshots.2
+    - name: Authorize private report storage
+      if: ${{ always() }}
+      id: private-report-writer
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Retain diagnostics privately
+      if: ${{ always() && steps.private-report-writer.outcome == 'success' }}
+      env:
+        GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
+      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
+        fi
+    needs:
+    - implementation
+'on':
+  workflow_call:
+    inputs:
+      implementation_pin:
+        type: string
+        required: false
+        default: ''
+      release_tag:
+        type: string
+        required: true
+      dataset_id:
+        type: string
+        required: true
+      resolved_latest_release_tag:
+        type: string
+        required: true
+      allow_older_release:
+        type: string
+        required: true
+      deployment_id:
+        type: string
+        required: true
