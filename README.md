@@ -1,4 +1,4 @@
-# SEC Spotting publisher
+# SECspotting publisher
 
 Minimal public automation and hosting configuration for https://www.secspotting.com/.
 Application source, data processing and detailed diagnostics are private.
