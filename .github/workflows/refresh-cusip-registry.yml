@@ -270,6 +270,7 @@ jobs:
       if: ${{ always() && steps.private-report-writer.outcome == 'success' }}
       env:
         GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
+        SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
       run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
         fi
     needs:
