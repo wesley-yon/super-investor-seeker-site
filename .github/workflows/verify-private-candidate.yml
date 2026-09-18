@@ -107,6 +107,8 @@ jobs:
     - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
       with:
         python-version: '3.11'
+    - name: Prepare private validation runtime
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step verify-private-candidate.prepare.0
     - name: Run isolated private candidate checks
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step verify-private-candidate.validate.1
       env:
