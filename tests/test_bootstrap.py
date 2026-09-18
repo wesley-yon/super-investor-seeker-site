@@ -58,6 +58,30 @@ class PublisherBoundaryTests(unittest.TestCase):
         self.assertNotIn('a'*40, self.output.read_text())
         self.assertIn('site_changed=true', self.output.read_text())
 
+    def test_pipeline_targeted_flag_reaches_workflow_condition(self):
+        # The pipeline emits a boolean indicating a targeted run, not a CIK.
+        # Reproduce the ordinary-update output that previously rejected a run.
+        for targeted in ('false', 'true'):
+            with self.subTest(targeted=targeted):
+                self.output.unlink(missing_ok=True)
+                command = ('echo "migration_only=false" >> "$GITHUB_OUTPUT"; '
+                           f'echo "targeted_cik={targeted}" >> "$GITHUB_OUTPUT"')
+                (self.specs / 'fixture.job.0.json').write_text(json.dumps({
+                    'run': command, 'relay-output': True,
+                    'output-keys': ['migration_only', 'targeted_cik']}))
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(b.execute(self.root, 'fixture.job.0', self.env), 0)
+                self.assertEqual(self.output.read_text(),
+                                 f'migration_only=false\ntargeted_cik={targeted}\n')
+
+    def test_pipeline_targeted_flag_rejects_nonboolean_metadata(self):
+        path = self.root / 'metadata'
+        for value in ('', '320193', '1', 'False', 'PRIVATE_SENTINEL'):
+            path.write_text(f'migration_only=false\ntargeted_cik={value}\n')
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                b.relay(path, self.output, keys=['migration_only', 'targeted_cik'])
+            self.assertFalse(self.output.exists())
+
     def test_only_bounded_temporary_paths_reach_environment(self):
         path = self.root / 'metadata'
         path.write_text('ARTIFACT_DIR=/etc/private\n')
