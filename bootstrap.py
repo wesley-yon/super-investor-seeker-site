@@ -25,6 +25,8 @@ METADATA = {
     'present': BOOLEAN, 'outputs_rebuilt': BOOLEAN, 'legacy_snapshot': BOOLEAN,
     'migration_only': BOOLEAN, 'run_update': BOOLEAN, 'targeted_cik': r'[0-9]{0,10}',
     'snapshot_changed': BOOLEAN, 'site_changed': BOOLEAN,
+    'prepared_sha256': DIGEST, 'processed_accessions': r'[0-9]{1,10}',
+    'remaining_due': r'[0-9]{1,10}',
 }
 
 
@@ -136,7 +138,7 @@ def fetch(root, env):
     print('Pinned implementation fetched.')
 
 
-def relay(source, target, *, environment=False, env=None):
+def relay(source, target, *, environment=False, env=None, keys=None):
     if not source.exists() or not target:
         return
     text = source.read_text()
@@ -145,6 +147,8 @@ def relay(source, target, *, environment=False, env=None):
     for line in text.splitlines():
         require('=' in line, 'Multiline metadata is forbidden')
         key, value = line.split('=', 1)
+        if keys is not None and key not in keys:
+            continue
         if key == 'code_sha':
             require(re.fullmatch(SHA, value), 'Invalid private revision')
             continue  # Private identity stays inside the checkout and receipt.
@@ -205,8 +209,10 @@ def execute(root, key, env=None):
     receipt = {'step': key, 'exit_code': process.returncode,
                'log_sha256': hashlib.sha256(paths['log'].read_bytes()).hexdigest()}
     (logs / (key + '.receipt.json')).write_text(json.dumps(receipt, sort_keys=True) + '\n')
-    relay(paths['output'], env.get('GITHUB_OUTPUT'), env=env)
-    relay(paths['environment'], env.get('GITHUB_ENV'), environment=True, env=env)
+    if spec.get('relay-output', False):
+        relay(paths['output'], env.get('GITHUB_OUTPUT'), env=env, keys=spec.get('output-keys'))
+    if spec.get('relay-environment', False):
+        relay(paths['environment'], env.get('GITHUB_ENV'), environment=True, env=env)
     print('Private step passed.' if process.returncode == 0 else 'Private step failed; details retained privately.')
     return process.returncode
 

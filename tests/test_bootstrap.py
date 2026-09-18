@@ -104,6 +104,17 @@ class PublisherBoundaryTests(unittest.TestCase):
             self.assertEqual(b.execute(self.root, 'fixture.job.0', self.env | {'TEST_SECRET':'secret-12345678'}), 0)
         self.assertEqual((self.root / 'private-step-logs/test/fixture.job.0.log').read_text(), '[REDACTED]\n')
 
+    def test_incidental_test_metadata_stays_private_without_an_explicit_contract(self):
+        self.spec('echo "unused_private_field=PRIVATE_SENTINEL" >> "$GITHUB_OUTPUT"')
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(b.execute(self.root, 'fixture.job.0', self.env), 0)
+        self.assertFalse(self.output.exists())
+        path = self.specs / 'fixture.job.0.json'
+        spec = json.loads(path.read_text()); spec['relay-output'] = True
+        path.write_text(json.dumps(spec))
+        with self.assertRaises(ValueError):
+            b.execute(self.root, 'fixture.job.0', self.env)
+
 
 if __name__ == '__main__':
     unittest.main()
