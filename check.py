@@ -9,7 +9,7 @@ WORKFLOWS = {
     'activate-insider-pilot.yml', 'deploy-pages.yml', 'finalize-private-snapshots.yml',
     'keepalive.yml', 'maintain-insider-checkpoint.yml', 'publish-pages.yml',
     'refresh-cusip-registry.yml', 'update-data.yml', 'verify-environment-credentials.yml',
-    'verify-insider-checkpoint.yml', 'publisher-checks.yml',
+    'verify-insider-checkpoint.yml', 'publisher-checks.yml', 'rollback-pages.yml',
 }
 FILES = {'README.md', 'LICENSE', '.gitignore', 'bootstrap.py', 'check.py',
          'tests/test_bootstrap.py'} | {'.github/workflows/' + name for name in WORKFLOWS}
