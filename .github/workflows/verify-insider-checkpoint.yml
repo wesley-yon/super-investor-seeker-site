@@ -70,6 +70,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Set up Python
       uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
       with:
@@ -105,7 +106,7 @@ jobs:
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step verify-insider-checkpoint.verify.5
     - name: Authorize private report storage
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
       with:
@@ -119,8 +120,9 @@ jobs:
       env:
         GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
         SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
     needs:
     - implementation
 'on':

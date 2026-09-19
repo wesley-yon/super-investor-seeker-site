@@ -90,6 +90,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Authenticate to the private data repository
       id: data-app-token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
@@ -110,7 +111,7 @@ jobs:
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.resolve.5
     - name: Authorize private report storage
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
       with:
@@ -124,8 +125,9 @@ jobs:
       env:
         GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
         SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
     needs:
     - implementation
   build:
@@ -164,6 +166,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Execute private step 2
       env:
         ALLOW_OLDER_RELEASE: ${{ needs.resolve.outputs.allow_older_release }}
@@ -256,7 +259,7 @@ jobs:
         path: ${{ env.ARTIFACT_DIR }}
         include-hidden-files: true
     - name: Authorize private report storage
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
       with:
@@ -270,8 +273,9 @@ jobs:
       env:
         GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
         SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
   deploy:
     needs:
     - implementation
@@ -316,6 +320,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Authenticate to the private data repository
       id: data-app-token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
@@ -356,7 +361,7 @@ jobs:
           }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deploy.4
     - name: Authorize private report storage
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
       with:
@@ -370,8 +375,9 @@ jobs:
       env:
         GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
         SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
   deployment-identity:
     needs:
     - implementation
@@ -411,6 +417,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Execute private step 2
       id: receipt
       env:
@@ -436,7 +443,7 @@ jobs:
         EXPECTED_DATASET_ID: ${{ needs.resolve.outputs.dataset_id }}
         EXPECTED_RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
     - name: Authorize private report storage
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
       with:
@@ -450,8 +457,9 @@ jobs:
       env:
         GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
         SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
     environment: private-data
   cleanup-public-pages-artifacts:
     needs:
@@ -490,13 +498,14 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Execute private step 1
       env:
         GH_TOKEN: ${{ github.token }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.cleanup-public-pages-artifacts.0
     - name: Authorize private report storage
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
       with:
@@ -510,8 +519,9 @@ jobs:
       env:
         GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
         SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
     environment: private-data
 'on':
   workflow_call:
