@@ -85,6 +85,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Authorize retained package read
       id: package-reader
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
@@ -113,13 +114,14 @@ jobs:
         owner: ${{ github.repository_owner }}
         repositories: super-investor-seeker-data
         permission-contents: write
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
     - name: Retain diagnostics privately
       if: ${{ always() && steps.recovery-report-writer.outcome == 'success' }}
       env:
         GH_TOKEN: ${{ steps.recovery-report-writer.outputs.token }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
   deploy:
     if: ${{ github.ref == 'refs/heads/main' && vars.PRODUCTION_ENABLED == 'false' }}
     needs:
@@ -161,6 +163,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Deploy retained known-good package
       id: deployment
       uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
@@ -175,13 +178,14 @@ jobs:
         owner: ${{ github.repository_owner }}
         repositories: super-investor-seeker-data
         permission-contents: write
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
     - name: Retain diagnostics privately
       if: ${{ always() && steps.recovery-report-writer.outcome == 'success' }}
       env:
         GH_TOKEN: ${{ steps.recovery-report-writer.outputs.token }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
   verify:
     if: ${{ github.ref == 'refs/heads/main' && vars.PRODUCTION_ENABLED == 'false' }}
     needs:
@@ -218,6 +222,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Authorize private recovery storage
       id: receipt-writer
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
@@ -242,13 +247,14 @@ jobs:
         owner: ${{ github.repository_owner }}
         repositories: super-investor-seeker-data
         permission-contents: write
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
     - name: Retain diagnostics privately
       if: ${{ always() && steps.recovery-report-writer.outcome == 'success' }}
       env:
         GH_TOKEN: ${{ steps.recovery-report-writer.outputs.token }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
   cleanup:
     if: ${{ always() && needs.implementation.result == 'success' }}
     needs:
@@ -286,6 +292,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Execute private recovery step 3
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step rollback-pages.recovery.3
       env:
@@ -299,10 +306,11 @@ jobs:
         owner: ${{ github.repository_owner }}
         repositories: super-investor-seeker-data
         permission-contents: write
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
     - name: Retain diagnostics privately
       if: ${{ always() && steps.recovery-report-writer.outcome == 'success' }}
       env:
         GH_TOKEN: ${{ steps.recovery-report-writer.outputs.token }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'

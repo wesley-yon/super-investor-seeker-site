@@ -1,9 +1,15 @@
 """Audit the explicit public tree and the credential boundary of its workflows."""
+import json
 from pathlib import Path
 import re
 import subprocess
 import sys
 import yaml
+
+try:
+    from scripts.publisher_bootstrap import validate_approval
+except ImportError:
+    from bootstrap import validate_approval
 
 WORKFLOWS = {
     'activate-insider-pilot.yml', 'deploy-pages.yml', 'finalize-private-snapshots.yml',
@@ -12,6 +18,7 @@ WORKFLOWS = {
     'verify-insider-checkpoint.yml', 'publisher-checks.yml', 'rollback-pages.yml', 'verify-private-candidate.yml',
 }
 FILES = {'README.md', 'LICENSE', '.gitignore', 'bootstrap.py', 'check.py',
+         'implementation-approval.json', 'requirements.txt', '.github/dependabot.yml',
          'tests/test_bootstrap.py'} | {'.github/workflows/' + name for name in WORKFLOWS}
 
 
@@ -33,6 +40,15 @@ def audit(root, *, history=False):
     for name in paths:
         if (root / name).is_symlink():
             raise ValueError('Public symlink is forbidden')
+    validate_approval(json.loads((root / 'implementation-approval.json').read_text()),
+                      'wesley-yon/super-investor-seeker', require_configured=history)
+    dependencies = yaml.safe_load((root / '.github/dependabot.yml').read_text())
+    if dependencies.get('version') != 2 or not any(
+            update.get('package-ecosystem') == 'github-actions'
+            and update.get('directory') == '/'
+            and update.get('schedule', {}).get('interval') == 'weekly'
+            for update in dependencies.get('updates', [])):
+        raise ValueError('Weekly Actions dependency updates are required')
     for name in WORKFLOWS:
         w = yaml.safe_load((root / '.github/workflows' / name).read_text())
         events = w.get('on', w.get(True, {}))
@@ -47,6 +63,7 @@ def audit(root, *, history=False):
         for job in w['jobs'].values():
             if 'steps' not in job:
                 continue
+            fetched = False
             for step in job['steps']:
                 action = step.get('uses', '')
                 if action and not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}', action):
@@ -59,6 +76,22 @@ def audit(root, *, history=False):
                     raise ValueError('Private code must pass through quiet transport')
                 if action.startswith('actions/setup-python') and 'cache' in step.get('with', {}):
                     raise ValueError('Dependency cache forbidden for private jobs')
+                command = step.get('run', '')
+                if '--mode fetch' in command:
+                    if step.get('id') != 'verified-implementation':
+                        raise ValueError('Verified transport identity required')
+                    fetched = True
+                if '--step ' in command and not fetched:
+                    raise ValueError('Private execution must follow verified transport')
+                if 'store_private_workflow_logs.py' in command and (
+                        not fetched or '--mode verify' not in command):
+                    raise ValueError('Private diagnostics require approval verification')
+                if step.get('id', '').endswith('report-writer') and (
+                        not fetched or "steps.verified-implementation.outcome == 'success'" not in step.get('if', '')):
+                    raise ValueError('Report credential requires verified transport')
+                if 'pip install' in command and (
+                        '--require-hashes' not in command or '--only-binary=:all:' not in command):
+                    raise ValueError('Dependency installs require verified wheel hashes')
     return len(paths)
 
 

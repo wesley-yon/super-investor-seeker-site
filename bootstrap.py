@@ -16,6 +16,7 @@ import urllib.request
 SHA = r"[0-9a-f]{40}"
 DIGEST = r"[0-9a-f]{64}"
 BOOLEAN = r"true|false"
+APPROVAL_PATH = Path(__file__).resolve().parent / 'implementation-approval.json'
 METADATA = {
     'release_tag': r'dataset-[A-Za-z0-9._-]+',
     'resolved_latest_release_tag': r'dataset-[A-Za-z0-9._-]+',
@@ -55,6 +56,59 @@ def repository(env):
     require(value in {'wesley-yon/super-investor-seeker',
                       'wesley-yon/super-investor-seeker-migration'}, 'Unexpected implementation repository')
     return value
+
+
+def revision_digest(repo, sha):
+    require(re.fullmatch(SHA, sha), 'Invalid implementation identity')
+    return hashlib.sha256(f'publisher-approval-v1\n{repo}\n{sha}\n'.encode()).hexdigest()
+
+
+def approval_record(repo, sha):
+    digest = revision_digest(repo, sha)
+    return {'version': 1, 'repository': repo,
+            'ref': 'refs/tags/publisher-approved-' + digest[:24], 'commit_sha256': digest}
+
+
+def validate_approval(record, repo, *, require_configured=True):
+    require(isinstance(record, dict) and set(record) == {'version', 'repository', 'ref', 'commit_sha256'},
+            'Invalid approval record')
+    require(type(record['version']) is int and record['version'] == 1
+            and record['repository'] == repo, 'Approval repository mismatch')
+    if not require_configured and record['ref'] == record['commit_sha256'] == '':
+        return record
+    digest = record['commit_sha256']
+    require(isinstance(digest, str) and re.fullmatch(DIGEST, digest), 'Approval is not configured')
+    require(record['ref'] == 'refs/tags/publisher-approved-' + digest[:24], 'Invalid approved reference')
+    return record
+
+
+def approved(env, sha=None):
+    # This file belongs to the checked-out protected PUBLIC publisher revision.
+    # Private code, repository variables and workflow inputs cannot override it.
+    require(not APPROVAL_PATH.is_symlink(), 'Approval symlink forbidden')
+    record = validate_approval(json.loads(APPROVAL_PATH.read_text()), repository(env))
+    if sha is not None:
+        require(revision_digest(repository(env), sha) == record['commit_sha256'],
+                'Implementation revision is not approved')
+    return record
+
+
+def verify_checkout(root, env):
+    safe_mode(env)
+    root = Path(root).resolve()
+    require(Path(quiet(['git', '-C', str(root), 'rev-parse', '--show-toplevel']).decode().strip()).resolve() == root,
+            'Implementation must be the checkout root')
+    sha = quiet(['git', '-C', str(root), 'rev-parse', 'HEAD']).decode().strip()
+    approved(env, sha)
+    require(not quiet(['git', '-C', str(root), 'status', '--porcelain', '--untracked-files=no']),
+            'Approved implementation has tracked modifications')
+    return sha
+
+
+def read_spec(root, key):
+    # Read the approved commit's blob, never an untracked replacement file.
+    return json.loads(quiet(['git', '-C', str(root), 'show',
+                             'HEAD:.private-workflow-steps/' + key + '.json']))
 
 
 def pin_message(env, sha):
@@ -101,17 +155,20 @@ def authorize_git(env):
 
 def resolve(env):
     safe_mode(env)
+    record = approved(env)
     existing = env.get('SIS_IMPLEMENTATION_PIN', '')
     if existing:
-        unseal(env, existing)
+        approved(env, unseal(env, existing))
         pin = existing
     else:
         repo = repository(env)
-        request = urllib.request.Request('https://api.github.com/repos/' + repo + '/commits/main',
+        ref = record['ref'].removeprefix('refs/tags/')
+        request = urllib.request.Request('https://api.github.com/repos/' + repo + '/commits/' + ref,
                     headers={'Authorization': 'Bearer ' + env['SIS_CODE_READ_TOKEN'],
                              'Accept': 'application/vnd.github+json'})
         with urllib.request.urlopen(request, timeout=30) as response:
             sha = json.load(response)['sha']
+        approved(env, sha)
         pin = base64.urlsafe_b64encode(crypt_pin(pin_message(env, sha), env['SIS_PIN_PRIVATE_KEY'])).decode()
     with Path(env['GITHUB_OUTPUT']).open('a') as stream:
         stream.write('pin=' + pin + '\n')
@@ -121,6 +178,7 @@ def resolve(env):
 def fetch(root, env):
     safe_mode(env)
     sha = unseal(env, env['SIS_IMPLEMENTATION_PIN'])
+    approved(env, sha)
     root = Path(root).resolve()
     require(not root.exists(), 'Private checkout already exists')
     root.mkdir(parents=True, mode=0o700)
@@ -135,6 +193,7 @@ def fetch(root, env):
             'Checkout identity mismatch')
     config = quiet(['git', '-C', str(root), 'config', '--local', '--list']).decode()
     require('extraheader' not in config.lower() and 'x-access-token' not in config.lower(), 'Persisted credential')
+    verify_checkout(root, env)
     print('Pinned implementation fetched.')
 
 
@@ -171,7 +230,8 @@ def execute(root, key, env=None):
     safe_mode(env)
     require(re.fullmatch(r'[a-z0-9_-]+\.[a-z0-9_-]+\.[0-9]+', key), 'Invalid step identity')
     root = Path(root).resolve()
-    spec = json.loads((root / '.private-workflow-steps' / (key + '.json')).read_text())
+    verified_sha = verify_checkout(root, env)
+    spec = read_spec(root, key)
     require('${{' not in spec['run'], 'Unresolved workflow expression')
     job = env.get('GITHUB_JOB', 'local')
     require(re.fullmatch(r'[A-Za-z0-9_-]+', job), 'Invalid job identity')
@@ -188,9 +248,8 @@ def execute(root, key, env=None):
     if child.get('SIS_CODE_READ_TOKEN'):
         child = authorize_git(child)
     if (root / '.git').exists():
-        sha = quiet(['git', '-C', str(root), 'rev-parse', 'HEAD']).decode().strip()
-        child['EXPECTED_CODE_SHA'] = sha
-        child['REQUESTED_CODE_SHA'] = sha if env.get('SIS_EXPLICIT_PIN') == 'true' else ''
+        child['EXPECTED_CODE_SHA'] = verified_sha
+        child['REQUESTED_CODE_SHA'] = verified_sha if env.get('SIS_EXPLICIT_PIN') == 'true' else ''
     relative = spec.get('working-directory', '.')
     cwd = (root / relative).resolve()
     require(cwd == root or root in cwd.parents, 'Working directory escape')
@@ -219,7 +278,7 @@ def execute(root, key, env=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=('resolve', 'fetch', 'execute'), default='execute')
+    parser.add_argument('--mode', choices=('resolve', 'fetch', 'verify', 'execute'), default='execute')
     parser.add_argument('--root')
     parser.add_argument('--step')
     args = parser.parse_args()
@@ -228,6 +287,8 @@ def main():
             resolve(os.environ)
         elif args.mode == 'fetch':
             fetch(args.root, os.environ)
+        elif args.mode == 'verify':
+            verify_checkout(args.root, os.environ)
         else:
             return execute(args.root, args.step)
         return 0

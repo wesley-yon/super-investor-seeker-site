@@ -86,6 +86,7 @@ jobs:
         SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
     - name: Authorize private implementation read
       id: candidate-reader
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
@@ -125,10 +126,11 @@ jobs:
         owner: ${{ github.repository_owner }}
         repositories: super-investor-seeker-data
         permission-contents: write
-      if: ${{ always() }}
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
     - name: Retain diagnostics privately
       if: ${{ always() && steps.candidate-report-writer.outcome == 'success' }}
       env:
         GH_TOKEN: ${{ steps.candidate-report-writer.outputs.token }}
-      run: if [ -f .implementation/scripts/store_private_workflow_logs.py ]; then python .implementation/scripts/store_private_workflow_logs.py;
-        fi
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'

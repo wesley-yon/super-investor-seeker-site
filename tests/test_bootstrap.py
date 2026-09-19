@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 try:
     from scripts import publisher_bootstrap as b
@@ -27,6 +28,13 @@ class PublisherBoundaryTests(unittest.TestCase):
                         GITHUB_ENV=str(self.environment), GITHUB_JOB='test', GITHUB_REF='refs/heads/main')
         for name in ('RUNNER_DEBUG', 'ACTIONS_STEP_DEBUG', 'ACTIONS_RUNNER_DEBUG'):
             self.env.pop(name, None)
+        # These tests isolate the log boundary; ApprovalTests below exercise
+        # actual Git checkouts and the approval gate without mocking it.
+        verify = patch.object(b, 'verify_checkout', return_value='a'*40)
+        spec = patch.object(b, 'read_spec', side_effect=lambda root, key:
+                            json.loads((root / '.private-workflow-steps' / (key + '.json')).read_text()))
+        verify.start(); spec.start()
+        self.addCleanup(verify.stop); self.addCleanup(spec.stop)
 
     def spec(self, command):
         (self.specs / 'fixture.job.0.json').write_text(json.dumps({'run': command}))
@@ -138,6 +146,125 @@ class PublisherBoundaryTests(unittest.TestCase):
         path.write_text(json.dumps(spec))
         with self.assertRaises(ValueError):
             b.execute(self.root, 'fixture.job.0', self.env)
+
+
+class ApprovalTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.folder = Path(temp.name)
+        self.root = self.folder / 'implementation'; self.root.mkdir()
+        self.repo = 'wesley-yon/super-investor-seeker'
+        self.env = dict(os.environ, SIS_IMPLEMENTATION_REPOSITORY=self.repo,
+                        GITHUB_REF='refs/heads/main', GITHUB_RUN_ID='42',
+                        GITHUB_OUTPUT=str(self.folder / 'output'), RUNNER_TEMP=str(self.folder),
+                        GITHUB_JOB='approval-test')
+        for name in ('RUNNER_DEBUG', 'ACTIONS_STEP_DEBUG', 'ACTIONS_RUNNER_DEBUG', 'SIS_IMPLEMENTATION_PIN'):
+            self.env.pop(name, None)
+        self.git('init', '--quiet')
+        self.git('config', 'user.name', 'Approval fixture')
+        self.git('config', 'user.email', 'fixture@example.invalid')
+        specs = self.root / '.private-workflow-steps'; specs.mkdir()
+        (specs / 'fixture.job.0.json').write_text(json.dumps({'run': 'echo approved > executed'}))
+        self.git('add', '.'); self.git('commit', '--quiet', '-m', 'Approved fixture')
+        self.sha = self.git('rev-parse', 'HEAD').strip()
+        self.policy = self.folder / 'implementation-approval.json'
+        self.policy.write_text(json.dumps(b.approval_record(self.repo, self.sha)))
+        patched = patch.object(b, 'APPROVAL_PATH', self.policy); patched.start()
+        self.addCleanup(patched.stop)
+
+    def git(self, *arguments):
+        return subprocess.check_output(['git', '-C', str(self.root), *arguments], text=True)
+
+    def test_approved_checkout_executes_but_unapproved_commit_cannot(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(b.execute(self.root, 'fixture.job.0', self.env), 0)
+        self.assertEqual((self.root / 'executed').read_text(), 'approved\n')
+        (self.root / 'executed').unlink()
+        self.git('commit', '--quiet', '--allow-empty', '-m', 'Unreviewed revision')
+        with self.assertRaisesRegex(ValueError, 'not approved'):
+            b.execute(self.root, 'fixture.job.0', self.env)
+        self.assertFalse((self.root / 'executed').exists())
+
+    def test_dirty_checkout_and_untracked_spec_cannot_execute(self):
+        spec = self.root / '.private-workflow-steps/fixture.job.0.json'
+        spec.write_text(json.dumps({'run': 'touch executed'}))
+        with self.assertRaisesRegex(ValueError, 'tracked modifications'):
+            b.execute(self.root, 'fixture.job.0', self.env)
+        self.git('restore', '.')
+        (spec.parent / 'untracked.job.0.json').write_text(json.dumps({'run': 'touch executed'}))
+        with self.assertRaises(ValueError):
+            b.execute(self.root, 'untracked.job.0', self.env)
+        self.assertFalse((self.root / 'executed').exists())
+
+    def test_missing_unconfigured_tampered_and_symlink_policy_fail_closed(self):
+        original = self.policy.read_text()
+        for record in ({'version': 1, 'repository': self.repo, 'ref': '', 'commit_sha256': ''},
+                       json.loads(original) | {'ref': 'refs/heads/main'},
+                       json.loads(original) | {'repository': 'attacker/repo'}):
+            self.policy.write_text(json.dumps(record))
+            with self.assertRaises(ValueError):
+                b.verify_checkout(self.root, self.env)
+        self.policy.unlink()
+        with self.assertRaises(FileNotFoundError):
+            b.verify_checkout(self.root, self.env)
+        target = self.folder / 'other.json'; target.write_text(original)
+        self.policy.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, 'symlink'):
+            b.verify_checkout(self.root, self.env)
+
+    def test_digest_binds_repository_and_commit_without_publishing_sha(self):
+        record = b.approval_record(self.repo, self.sha)
+        self.assertNotIn(self.sha, json.dumps(record))
+        self.assertNotEqual(record['commit_sha256'], b.revision_digest(self.repo + '-migration', self.sha))
+        self.assertEqual(b.verify_checkout(self.root, self.env | {'SIS_APPROVED_SHA': 'b'*40}), self.sha)
+
+    def test_resolver_uses_approved_tag_and_rejects_moved_tag(self):
+        env = self.env | {'SIS_CODE_READ_TOKEN': 'fixture-read-token', 'SIS_PIN_PRIVATE_KEY': 'fixture-key'}
+        for sha in (self.sha, 'b'*40):
+            with self.subTest(sha=sha), patch.object(b.urllib.request, 'urlopen') as request, patch.object(b, 'crypt_pin', return_value=b'sealed'):
+                request.return_value.__enter__.return_value = io.StringIO(json.dumps({'sha': sha}))
+                if sha == self.sha:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        b.resolve(env)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'not approved'):
+                        b.resolve(env)
+                self.assertTrue(request.call_args.args[0].full_url.endswith(
+                    '/commits/' + json.loads(self.policy.read_text())['ref'].removeprefix('refs/tags/')))
+
+    def test_existing_sealed_target_is_rechecked_before_resolve_or_fetch(self):
+        env = self.env | {'SIS_IMPLEMENTATION_PIN': 'fixture-sealed-pin'}
+        with patch.object(b, 'unseal', return_value='b'*40), patch.object(b, 'authorize_git') as credentials:
+            with self.assertRaisesRegex(ValueError, 'not approved'):
+                b.resolve(env)
+            with self.assertRaisesRegex(ValueError, 'not approved'):
+                b.fetch(self.folder / 'rejected-checkout', env)
+            credentials.assert_not_called()
+        self.assertFalse((self.folder / 'rejected-checkout').exists())
+
+    def test_approved_sealed_target_fetches_exact_commit_without_persisted_credentials(self):
+        key = b.quiet(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048']).decode()
+        env = self.env | {'SIS_PIN_PRIVATE_KEY': key, 'SIS_CODE_READ_TOKEN': 'read-fixture-credential'}
+        pin = b.base64.urlsafe_b64encode(b.crypt_pin(b.pin_message(env, self.sha), key)).decode()
+        target = self.folder / 'fetched'
+        quiet = b.quiet
+
+        def local_origin(arguments, **kwargs):
+            # Only replace the network origin; all transport, pin, Git and
+            # checkout verification code executes against a real repository.
+            if arguments[3:6] == ['remote', 'add', 'origin']:
+                arguments = [*arguments[:-1], str(self.root)]
+            return quiet(arguments, **kwargs)
+
+        result = io.StringIO()
+        with patch.object(b, 'quiet', side_effect=local_origin), contextlib.redirect_stdout(result):
+            b.fetch(target, env | {'SIS_IMPLEMENTATION_PIN': pin})
+            self.assertEqual(b.execute(target, 'fixture.job.0', self.env), 0)
+        self.assertEqual(b.verify_checkout(target, self.env), self.sha)
+        self.assertEqual((target / 'executed').read_text(), 'approved\n')
+        self.assertNotIn(self.sha, result.getvalue())
+        self.assertNotIn('read-fixture-credential', (target / '.git/config').read_text())
 
 
 if __name__ == '__main__':
