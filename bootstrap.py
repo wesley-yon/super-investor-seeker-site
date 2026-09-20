@@ -21,7 +21,7 @@ METADATA = {
     'release_tag': r'dataset-[A-Za-z0-9._-]+',
     'resolved_latest_release_tag': r'dataset-[A-Za-z0-9._-]+',
     'active_tag': r'dataset-[A-Za-z0-9._-]+',
-    'dataset_id': DIGEST, 'deployment_id': r'[0-9]+',
+    'dataset_id': DIGEST, 'insider_manifest_sha256': DIGEST, 'deployment_id': r'[0-9]+',
     'deploy_needed': BOOLEAN, 'allow_older_release': BOOLEAN,
     'present': BOOLEAN, 'outputs_rebuilt': BOOLEAN, 'legacy_snapshot': BOOLEAN,
     'migration_only': BOOLEAN, 'run_update': BOOLEAN, 'targeted_cik': BOOLEAN,
