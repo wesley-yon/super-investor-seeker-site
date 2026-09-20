@@ -66,6 +66,7 @@ jobs:
       resolved_latest_release_tag: ${{ steps.target.outputs.resolved_latest_release_tag }}
       deploy_needed: ${{ steps.target.outputs.deploy_needed }}
       allow_older_release: ${{ steps.target.outputs.allow_older_release }}
+      insider_manifest_sha256: ${{ steps.target.outputs.insider_manifest_sha256 }}
     steps:
     - name: Fetch public adapter
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -199,6 +200,7 @@ jobs:
     - name: Execute private step 7
       env:
         GH_TOKEN: ${{ steps.data-app-token.outputs.token }}
+        EXPECTED_INSIDER_MANIFEST_SHA256: ${{ needs.resolve.outputs.insider_manifest_sha256 }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.build.6
     - name: Execute private step 8

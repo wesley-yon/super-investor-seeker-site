@@ -13,7 +13,7 @@ except ImportError:
 
 WORKFLOWS = {
     'activate-insider-pilot.yml', 'deploy-pages.yml', 'finalize-private-snapshots.yml',
-    'keepalive.yml', 'maintain-insider-checkpoint.yml', 'publish-pages.yml',
+    'keepalive.yml', 'maintain-insider-checkpoint.yml', 'publish-pages.yml', 'refresh-insider-daily.yml',
     'refresh-cusip-registry.yml', 'update-data.yml', 'verify-environment-credentials.yml',
     'verify-insider-checkpoint.yml', 'publisher-checks.yml', 'rollback-pages.yml', 'verify-private-candidate.yml',
 }
