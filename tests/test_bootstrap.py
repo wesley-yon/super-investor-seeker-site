@@ -66,6 +66,22 @@ class PublisherBoundaryTests(unittest.TestCase):
         self.assertNotIn('a'*40, self.output.read_text())
         self.assertIn('site_changed=true', self.output.read_text())
 
+    def test_daily_insider_manifest_reaches_build_only_as_exact_sha256(self):
+        digest = 'b' * 64
+        self.spec('echo "insider_manifest_sha256=' + digest + '" >> "$GITHUB_OUTPUT"')
+        path = self.specs / 'fixture.job.0.json'
+        spec = json.loads(path.read_text())
+        spec.update({'relay-output': True, 'output-keys': ['insider_manifest_sha256']})
+        path.write_text(json.dumps(spec))
+        self.assertEqual(b.execute(self.root, 'fixture.job.0', self.env), 0)
+        self.assertEqual(self.output.read_text(), 'insider_manifest_sha256=' + digest + '\n')
+        self.output.unlink()
+        for value in ('private-value', 'b' * 40, 'b' * 65, 'B' * 64):
+            source = self.root / 'invalid'; source.write_text('insider_manifest_sha256=' + value)
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                b.relay(source, self.output, keys=['insider_manifest_sha256'])
+            self.assertFalse(self.output.exists())
+
     def test_pipeline_targeted_flag_reaches_workflow_condition(self):
         # The pipeline emits a boolean indicating a targeted run, not a CIK.
         # Reproduce the ordinary-update output that previously rejected a run.
