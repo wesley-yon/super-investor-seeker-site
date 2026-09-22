@@ -45,7 +45,7 @@ jobs:
       && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     environment: private-data
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
     - name: Fetch public adapter
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
