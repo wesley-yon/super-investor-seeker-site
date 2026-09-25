@@ -92,14 +92,14 @@ jobs:
         repositories: super-investor-seeker-data
         permission-contents: read
     - name: Execute private step 6
-      if: github.event.schedule != '13 12 * * *' && inputs.verify_only != true
+      if: github.event.schedule != '13 3 * * *' && inputs.verify_only != true
       env:
         GH_TOKEN: ${{ steps.reader.outputs.token }}
         SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-insider-daily.refresh.5
     - name: Authorize verified archive and state promotion
-      if: github.event.schedule != '13 12 * * *' && inputs.verify_only != true
+      if: github.event.schedule != '13 3 * * *' && inputs.verify_only != true
       id: writer
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
       with:
@@ -109,13 +109,13 @@ jobs:
         repositories: super-investor-seeker-data
         permission-contents: write
     - name: Execute private step 8
-      if: github.event.schedule != '13 12 * * *' && inputs.verify_only != true
+      if: github.event.schedule != '13 3 * * *' && inputs.verify_only != true
       env:
         GH_TOKEN: ${{ steps.writer.outputs.token }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-insider-daily.refresh.7
     - name: Execute private step 9
-      if: github.event.schedule == '13 12 * * *' || inputs.verify_only == true
+      if: github.event.schedule == '13 3 * * *' || inputs.verify_only == true
       env:
         GH_TOKEN: ${{ steps.reader.outputs.token }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
@@ -143,7 +143,7 @@ jobs:
 'on':
   schedule:
   - cron: 43 9 * * *
-  - cron: 13 12 * * *
+  - cron: 13 3 * * *
   workflow_dispatch:
     inputs:
       verify_only:
