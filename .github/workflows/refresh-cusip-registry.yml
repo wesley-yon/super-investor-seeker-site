@@ -196,6 +196,9 @@ jobs:
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.18
     - name: Execute private step 20
+      if: steps.restore_snapshot.outputs.legacy_snapshot != 'true' && inputs.rebuild_security_master != true && inputs.fund_names_only
+        != true && inputs.security_labels_only != true
+      timeout-minutes: 45
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.19
       env:
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
@@ -224,9 +227,13 @@ jobs:
       env:
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
     - name: Execute private step 27
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.26
+      env:
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+    - name: Execute private step 28
       if: always()
       continue-on-error: true
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.26
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.27
       env:
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
     - name: Refresh private data publication credential
@@ -239,7 +246,7 @@ jobs:
         repositories: super-investor-seeker-data
         permission-contents: write
     - name: Authorize private implementation read
-      id: implementation-refresh-28
+      id: implementation-refresh-29
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
@@ -247,16 +254,16 @@ jobs:
         owner: ${{ github.repository_owner }}
         repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
         permission-contents: read
-    - name: Execute private step 29
+    - name: Execute private step 30
       id: publish_snapshot
       env:
         DATA_ARCHIVE_TOKEN: ${{ steps.publish-data-app-token.outputs.token }}
         BASE_DATASET_ID: ${{ steps.restore_snapshot.outputs.dataset_id }}
         GH_TOKEN: ${{ steps.publish-data-app-token.outputs.token }}
         PUBLIC_GITHUB_TOKEN: ${{ github.token }}
-        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-28.outputs.token || steps.implementation-reader.outputs.token
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-29.outputs.token || steps.implementation-reader.outputs.token
           }}
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.28
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.29
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
