@@ -282,6 +282,49 @@ class ApprovalTests(unittest.TestCase):
         self.assertNotIn(self.sha, result.getvalue())
         self.assertNotIn('read-fixture-credential', (target / '.git/config').read_text())
 
+    def test_pinned_git_fetch_retries_without_changing_the_target(self):
+        key = b.quiet(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048']).decode()
+        env = self.env | {'SIS_PIN_PRIVATE_KEY': key, 'SIS_CODE_READ_TOKEN': 'read-fixture-credential'}
+        pin = b.base64.urlsafe_b64encode(b.crypt_pin(b.pin_message(env, self.sha), key)).decode()
+        real_quiet = b.quiet
+        attempts = []
+
+        def flaky_origin(arguments, **kwargs):
+            if arguments[3:6] == ['remote', 'add', 'origin']:
+                arguments = [*arguments[:-1], str(self.root)]
+            if 'fetch' in arguments:
+                attempts.append(arguments[-1])
+                if len(attempts) < 3:
+                    raise ValueError('Private subprocess failed')
+            return real_quiet(arguments, **kwargs)
+
+        with patch.object(b, 'quiet', side_effect=flaky_origin), patch.object(b.time, 'sleep'):
+            b.fetch(self.folder / 'retried', env | {'SIS_IMPLEMENTATION_PIN': pin})
+        self.assertEqual(attempts, [self.sha] * 3)
+        self.assertEqual(b.verify_checkout(self.folder / 'retried', self.env), self.sha)
+
+    def test_exhausted_git_fetch_reports_only_a_safe_stage(self):
+        key = b.quiet(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048']).decode()
+        env = self.env | {'SIS_PIN_PRIVATE_KEY': key, 'SIS_CODE_READ_TOKEN': 'read-fixture-credential'}
+        pin = b.base64.urlsafe_b64encode(b.crypt_pin(b.pin_message(env, self.sha), key)).decode()
+        real_quiet = b.quiet
+        attempts = []
+
+        def failed_origin(arguments, **kwargs):
+            if arguments[3:6] == ['remote', 'add', 'origin']:
+                arguments = [*arguments[:-1], str(self.root)]
+            if 'fetch' in arguments:
+                attempts.append(arguments[-1])
+                raise ValueError('secret provider response')
+            return real_quiet(arguments, **kwargs)
+
+        with patch.object(b, 'quiet', side_effect=failed_origin), patch.object(b.time, 'sleep'):
+            with self.assertRaises(b.PrivateFetchError) as error:
+                b.fetch(self.folder / 'failed', env | {'SIS_IMPLEMENTATION_PIN': pin})
+        self.assertEqual(attempts, [self.sha] * 3)
+        self.assertNotIn(self.sha, str(error.exception))
+        self.assertNotIn('secret provider response', str(error.exception))
+
 
 if __name__ == '__main__':
     unittest.main()

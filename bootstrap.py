@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 
 SHA = r"[0-9a-f]{40}"
@@ -29,6 +30,10 @@ METADATA = {
     'prepared_sha256': DIGEST, 'processed_accessions': r'[0-9]{1,10}',
     'remaining_due': r'[0-9]{1,10}',
 }
+
+
+class PrivateFetchError(RuntimeError):
+    """Safe public diagnostic without a private revision or credential."""
 
 
 def require(ok, message):
@@ -187,7 +192,17 @@ def fetch(root, env):
     quiet(['git', 'init', '--quiet', str(root)], env=child)
     quiet(['git', '-C', str(root), 'remote', 'add', 'origin',
            'https://github.com/' + repository(env) + '.git'], env=child)
-    quiet(['git', '-C', str(root), 'fetch', '--quiet', '--no-tags', '--depth=1', 'origin', sha], env=child)
+    # A scheduled run can encounter a short GitHub transport failure after its
+    # target has already been pinned. Retry that exact SHA with the same
+    # short-lived reader; never fall back to a moving branch.
+    for attempt in range(3):
+        try:
+            quiet(['git', '-C', str(root), 'fetch', '--quiet', '--no-tags', '--depth=1', 'origin', sha], env=child)
+            break
+        except ValueError:
+            if attempt == 2:
+                raise PrivateFetchError('Pinned implementation Git fetch failed after 3 attempts') from None
+            time.sleep(attempt + 1)
     quiet(['git', '-C', str(root), 'checkout', '--quiet', '--detach', 'FETCH_HEAD'], env=child)
     require(quiet(['git', '-C', str(root), 'rev-parse', 'HEAD']).decode().strip() == sha,
             'Checkout identity mismatch')
@@ -292,6 +307,9 @@ def main():
         else:
             return execute(args.root, args.step)
         return 0
+    except PrivateFetchError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     except Exception:
         print('Private adapter rejected this operation; no private output was published.', file=sys.stderr)
         return 1
