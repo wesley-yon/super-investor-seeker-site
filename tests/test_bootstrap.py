@@ -3,6 +3,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -151,6 +152,25 @@ class PublisherBoundaryTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(b.execute(self.root, 'fixture.job.0', self.env | {'TEST_SECRET':'secret-12345678'}), 0)
         self.assertEqual((self.root / 'private-step-logs/test/fixture.job.0.log').read_text(), '[REDACTED]\n')
+
+    @unittest.skipUnless(shutil.which('timeout'), 'GNU timeout is required')
+    def test_prepare_timeout_retains_redacted_private_progress_and_failure_receipt(self):
+        secret = 'PRIVATE_TIMEOUT_SENTINEL_9eae881cb'
+        self.spec("timeout --signal=TERM --kill-after=1s 1s bash -c "
+                  "'echo phase-start; echo \"$TEST_SECRET\"; sleep 3'")
+        public = io.StringIO()
+        with contextlib.redirect_stdout(public):
+            code = b.execute(self.root, 'fixture.job.0', self.env | {'TEST_SECRET': secret})
+        self.assertEqual(code, 124)
+        self.assertNotIn(secret, public.getvalue())
+        self.assertNotIn('phase-start', public.getvalue())
+        logs = self.root / 'private-step-logs/test'
+        private = (logs / 'fixture.job.0.log').read_text()
+        self.assertIn('phase-start', private)
+        self.assertIn('[REDACTED]', private)
+        self.assertNotIn(secret, private)
+        self.assertEqual(json.loads((logs / 'fixture.job.0.receipt.json').read_text())['exit_code'], 124)
+        self.assertFalse(self.output.exists())
 
     def test_incidental_test_metadata_stays_private_without_an_explicit_contract(self):
         self.spec('echo "unused_private_field=PRIVATE_SENTINEL" >> "$GITHUB_OUTPUT"')
