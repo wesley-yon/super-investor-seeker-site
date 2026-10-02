@@ -11,30 +11,32 @@ try:
 except ImportError:
     from bootstrap import validate_approval
 
+RETIRED_WORKFLOWS = frozenset({
+    'activate-insider-pilot.yml', 'refresh-insider-daily.yml',
+    'maintain-insider-checkpoint.yml', 'verify-insider-checkpoint.yml',
+})
 WORKFLOWS = {
-    'activate-insider-pilot.yml', 'deploy-pages.yml', 'finalize-private-snapshots.yml',
-    'keepalive.yml', 'maintain-insider-checkpoint.yml', 'publish-pages.yml', 'refresh-insider-daily.yml',
+    'deploy-pages.yml', 'finalize-private-snapshots.yml',
+    'keepalive.yml', 'publish-pages.yml',
     'refresh-cusip-registry.yml', 'update-data.yml', 'verify-environment-credentials.yml',
-    'verify-insider-checkpoint.yml', 'publisher-checks.yml', 'rollback-pages.yml', 'verify-private-candidate.yml',
+    'publisher-checks.yml', 'rollback-pages.yml', 'verify-private-candidate.yml',
 }
 FILES = {'README.md', 'LICENSE', '.gitignore', 'bootstrap.py', 'check.py',
          'implementation-approval.json', 'requirements.txt', '.github/dependabot.yml',
          'tests/test_bootstrap.py'} | {'.github/workflows/' + name for name in WORKFLOWS}
+HISTORICAL_FILES = FILES | {'.github/workflows/' + name for name in RETIRED_WORKFLOWS}
 
 
 def audit(root, *, history=False):
     root = Path(root)
+    paths = {p.relative_to(root).as_posix() for p in root.rglob('*')
+             if p.is_file() and '.git' not in p.parts and '__pycache__' not in p.parts}
     if history:
-        paths = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z']).decode().split('\0')
-        paths = {p for p in paths if p}
         commits = subprocess.check_output(['git', '-C', str(root), 'rev-list', '--all'], text=True).splitlines()
         for commit in commits:
             tree = set(subprocess.check_output(['git', '-C', str(root), 'ls-tree', '-r', '--name-only', commit], text=True).splitlines())
-            if not tree <= FILES:
+            if not tree <= HISTORICAL_FILES:
                 raise ValueError('Unexpected file in public history')
-    else:
-        paths = {p.relative_to(root).as_posix() for p in root.rglob('*')
-                 if p.is_file() and '.git' not in p.parts and '__pycache__' not in p.parts}
     if paths != FILES:
         raise ValueError('Public tree differs from explicit publisher allowlist')
     for name in paths:
