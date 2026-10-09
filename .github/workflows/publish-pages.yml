@@ -385,7 +385,7 @@ jobs:
     - implementation
     - resolve
     - deploy
-    if: "${{ (always() && github.ref == 'refs/heads/main' &&\n    needs.resolve.result == 'success' &&\n    (needs.resolve.outputs.deploy_needed\
+    if: "${{ (!cancelled() && github.ref == 'refs/heads/main' &&\n    needs.resolve.result == 'success' &&\n    (needs.resolve.outputs.deploy_needed\
       \ == 'false' ||\n     needs.deploy.result == 'success')) && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED\
       \ == 'true' || github.event_name == 'workflow_dispatch') }}"
     runs-on: ubuntu-latest
@@ -470,7 +470,7 @@ jobs:
     - build
     - deploy
     - deployment-identity
-    if: ${{ always() && github.ref == 'refs/heads/main' && needs.implementation.result == 'success' }}
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.implementation.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
