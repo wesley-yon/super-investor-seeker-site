@@ -256,7 +256,7 @@ jobs:
 
         python .implementation/scripts/store_private_workflow_logs.py'
   cleanup:
-    if: ${{ always() && needs.implementation.result == 'success' }}
+    if: ${{ !cancelled() && needs.implementation.result == 'success' }}
     needs:
     - implementation
     - prepare

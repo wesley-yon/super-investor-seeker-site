@@ -1,7 +1,7 @@
 # SECspotter publisher
 
-Minimal public automation and hosting configuration for https://www.secspotting.com/.
+Minimal public automation and hosting configuration for https://secspotter.com/.
 Application source, data processing and detailed diagnostics are private.
 Browser-delivered website files and data remain public.
 
-The SECspotter rebrand is live; the move to secspotter.com is planned separately.
+The Pages custom-domain setting and PAGES_SITE_URL must match this release's canonical URL.
