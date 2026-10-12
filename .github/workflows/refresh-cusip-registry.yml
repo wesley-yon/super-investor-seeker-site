@@ -182,6 +182,7 @@ jobs:
       timeout-minutes: 50
       env:
         SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        PIPELINE_WORKERS: ${{ vars.RECONCILE_WORKERS || '2' }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.17
     - name: Execute private step 19
