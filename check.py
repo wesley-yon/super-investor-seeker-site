@@ -20,7 +20,10 @@ WORKFLOWS = {
     'keepalive.yml', 'publish-pages.yml',
     'refresh-cusip-registry.yml', 'update-data.yml', 'verify-environment-credentials.yml',
     'publisher-checks.yml', 'rollback-pages.yml', 'verify-private-candidate.yml',
+    'update-clock.yml',
 }
+# These run without any private code, data, or deployment credential.
+PUBLIC_ONLY_WORKFLOWS = frozenset({'publisher-checks.yml', 'update-clock.yml'})
 FILES = {'README.md', 'LICENSE', '.gitignore', 'bootstrap.py', 'check.py',
          'implementation-approval.json', 'requirements.txt', '.github/dependabot.yml',
          'tests/test_bootstrap.py'} | {'.github/workflows/' + name for name in WORKFLOWS}
@@ -58,7 +61,8 @@ def audit(root, *, history=False):
             raise ValueError('Privileged PR event forbidden')
         is_check = name == 'publisher-checks.yml'
         raw = (root / '.github/workflows' / name).read_text()
-        if is_check and any(token in raw for token in ('secrets.', 'private-data', 'github-pages', 'IMPLEMENTATION_READER')):
+        if name in PUBLIC_ONLY_WORKFLOWS and any(
+                token in raw for token in ('secrets.', 'private-data', 'github-pages', 'IMPLEMENTATION_READER')):
             raise ValueError('Public checks must have no private access')
         if 'pull_request' in events and not is_check:
             raise ValueError('Private workflow exposed to public pull requests')

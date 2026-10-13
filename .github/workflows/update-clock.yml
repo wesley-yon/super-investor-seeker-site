@@ -1,0 +1,64 @@
+name: Start 13F updates on time
+'on':
+  schedule:
+  - cron: 53 * * * *
+  workflow_dispatch: null
+permissions: {}
+concurrency:
+  group: update-clock
+  cancel-in-progress: false
+jobs:
+  tick:
+    if: github.ref == 'refs/heads/main' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      actions: write
+    steps:
+    - name: Wait for the next update slot, start the update, and re-arm
+      shell: python
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PRODUCTION_ENABLED: ${{ vars.PRODUCTION_ENABLED }}
+      run: "\"\"\"Start the 13F update on time from inside GitHub, then re-arm this clock.\n\nGitHub delivers `schedule` events\
+        \ hours late and drops the slots in between.\nA dispatched run starts at once, so one small public job waits for the\
+        \ next\nupdate slot, requests the update, and requests its own successor. The late\nschedule remains only to restart\
+        \ a clock that stopped.\n\nThe publisher generator embeds this file verbatim as the job's script. It uses\nthe standard\
+        \ library and the job's own token; it reads no private code or data.\n\"\"\"\nfrom __future__ import annotations\n\
+        \nfrom datetime import datetime, timedelta, timezone\nimport json\nimport os\nimport time\nimport urllib.error\nimport\
+        \ urllib.request\n\n# The update window of update-data.yml's own schedule: 7am-7pm\n# America/New_York in both EST\
+        \ and EDT, Monday to Friday. These UTC hours never\n# cross a New York date boundary, so the UTC weekday is the New\
+        \ York weekday.\nSLOT_MINUTE = 23\nSLOT_HOURS = range(11, 24)\nSLOT_WEEKDAYS = range(0, 5)\n# A hosted job may run\
+        \ six hours. Longer gaps are crossed in several runs.\nMAX_WAIT = timedelta(hours=5)\nUPDATE_WORKFLOW = 'update-data.yml'\n\
+        CLOCK_WORKFLOW = 'update-clock.yml'\nATTEMPTS = 4\n\n\ndef next_slot(now: datetime) -> datetime:\n    \"\"\"Return\
+        \ the first update slot strictly after now.\"\"\"\n    candidate = now.replace(minute=SLOT_MINUTE, second=0, microsecond=0)\n\
+        \    if candidate <= now:\n        candidate += timedelta(hours=1)\n    while candidate.hour not in SLOT_HOURS or\
+        \ candidate.weekday() not in SLOT_WEEKDAYS:\n        candidate += timedelta(hours=1)\n    return candidate\n\n\ndef\
+        \ plan(now: datetime) -> tuple[datetime, bool]:\n    \"\"\"Return when this run should wake and whether an update\
+        \ slot is then due.\"\"\"\n    slot = next_slot(now)\n    if slot - now > MAX_WAIT:\n        return now + MAX_WAIT,\
+        \ False\n    return slot, True\n\n\ndef request(method: str, path: str, body: dict | None = None):\n    repository,\
+        \ token = os.environ['GITHUB_REPOSITORY'], os.environ['GH_TOKEN']\n    call = urllib.request.Request(\n        f'https://api.github.com/repos/{repository}/actions/workflows/{path}',\
+        \ method=method,\n        data=None if body is None else json.dumps(body).encode(),\n        headers={'Authorization':\
+        \ f'Bearer {token}', 'Accept': 'application/vnd.github+json',\n                 'X-GitHub-Api-Version': '2022-11-28'})\n\
+        \    for attempt in range(1, ATTEMPTS + 1):\n        try:\n            with urllib.request.urlopen(call, timeout=30)\
+        \ as response:\n                raw = response.read()\n                return json.loads(raw) if raw else None\n \
+        \       except (urllib.error.URLError, TimeoutError, ValueError) as error:\n            # A refused request, such\
+        \ as a disabled workflow, will not recover.\n            permanent = isinstance(error, urllib.error.HTTPError) and\
+        \ error.code < 500 and error.code != 429\n            if permanent or attempt == ATTEMPTS:\n                raise\n\
+        \            time.sleep(15 * attempt)\n\n\ndef update_active(api=request) -> bool:\n    runs = api('GET', f'{UPDATE_WORKFLOW}/runs?per_page=30')['workflow_runs']\n\
+        \    return any(run['status'] != 'completed' for run in runs)\n\n\ndef dispatch(workflow: str, api=request) -> None:\n\
+        \    api('POST', f'{workflow}/dispatches', {'ref': 'main'})\n\n\ndef tick(now: datetime, *, production: bool, api=request,\
+        \ sleep=time.sleep, clock=None) -> str:\n    \"\"\"Wait for the planned time, start a due update, and always re-arm.\"\
+        \"\"\n    clock = clock or (lambda: datetime.now(timezone.utc))\n    wake, due = plan(now)\n    print(f'Waiting until\
+        \ {wake:%Y-%m-%d %H:%M} UTC', flush=True)\n    while (remaining := (wake - clock()).total_seconds()) > 0:\n      \
+        \  sleep(min(remaining, 300))\n    try:\n        if not due:\n            outcome = 'no update slot yet'\n       \
+        \ elif not production:\n            outcome = 'production is paused; update not started'\n        else:\n        \
+        \    try:\n                active = update_active(api)\n            except (urllib.error.URLError, TimeoutError, ValueError,\
+        \ KeyError, TypeError) as error:\n                # An unreadable run list must not cost the slot. At worst one\n\
+        \                # extra update waits behind the active one.\n                print(f'Could not read update runs:\
+        \ {error}', flush=True)\n                active = False\n            if active:\n                outcome = 'an update\
+        \ is already running or queued; not adding another'\n            else:\n                dispatch(UPDATE_WORKFLOW,\
+        \ api)\n                outcome = 'update started'\n    finally:\n        # Re-arm even when the update could not\
+        \ be started, so one refused\n        # request does not stop every later slot.\n        dispatch(CLOCK_WORKFLOW,\
+        \ api)\n    return outcome\n\n\nif __name__ == '__main__':\n    print(tick(datetime.now(timezone.utc), production=os.environ.get('PRODUCTION_ENABLED')\
+        \ == 'true'))\n"
