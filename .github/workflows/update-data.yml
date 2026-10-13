@@ -226,10 +226,11 @@ jobs:
       id: recent_filings
       if: steps.restore_snapshot.outputs.legacy_snapshot != 'true' && steps.pipeline.outputs.migration_only != 'true' && steps.pipeline.outputs.targeted_cik
         != 'true'
-      timeout-minutes: 20
+      timeout-minutes: 50
       env:
         SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         RECENT_13F_QUARTERS: ${{ inputs.filing_quarters || 4 }}
+        RECENT_13F_MAX_CIKS: '100'
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.13
     - name: Execute private step 15
