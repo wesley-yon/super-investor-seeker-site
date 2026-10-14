@@ -20,7 +20,7 @@ WORKFLOWS = {
     'keepalive.yml', 'publish-pages.yml',
     'refresh-cusip-registry.yml', 'update-data.yml', 'verify-environment-credentials.yml',
     'publisher-checks.yml', 'rollback-pages.yml', 'verify-private-candidate.yml',
-    'update-clock.yml',
+    'update-clock.yml', 'check-candidate-release.yml',
 }
 # These run without any private code, data, or deployment credential.
 PUBLIC_ONLY_WORKFLOWS = frozenset({'publisher-checks.yml', 'update-clock.yml'})
