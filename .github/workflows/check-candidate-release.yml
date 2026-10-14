@@ -1,0 +1,134 @@
+name: Check a release candidate against live production
+run-name: Pre-release check ${{ inputs.candidate }}${{ inputs.acknowledge_refresh != 'none' && format(' acknowledging {0}
+  refresh', inputs.acknowledge_refresh) || '' }}
+'on':
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: commit_sha256 from the candidate approval record (64 hex characters)
+        required: true
+        type: string
+      acknowledge_refresh:
+        description: Accept a NEEDS REFRESH result because this refresh will follow the release
+        required: false
+        type: choice
+        default: none
+        options:
+        - none
+        - fund-names
+        - security-master
+permissions:
+  contents: read
+concurrency:
+  group: release-candidate-check
+  cancel-in-progress: false
+env:
+  SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+    }}
+  SIS_EXPLICIT_PIN: 'true'
+jobs:
+  implementation:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    environment: private-data
+    timeout-minutes: 5
+    outputs:
+      pin: ${{ steps.target.outputs.pin }}
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Pin implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode resolve --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ''
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: target
+  check:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    needs: implementation
+    runs-on: ubuntu-latest
+    environment: private-data
+    timeout-minutes: 350
+    steps:
+    - name: Free runner disk
+      run: 'sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+
+        df -h "$RUNNER_TEMP"'
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Fetch pinned implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode fetch --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
+    - name: Authorize production dataset read
+      id: dataset-reader
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: read
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      with:
+        python-version: '3.11'
+    - name: Prepare private validation runtime
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step check-candidate-release.check.0
+    - name: Check the candidate against production
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step check-candidate-release.check.1
+      env:
+        CANDIDATE_COMMITMENT: ${{ inputs.candidate }}
+        ACKNOWLEDGED_REFRESH: ${{ inputs.acknowledge_refresh != 'none' && inputs.acknowledge_refresh || '' }}
+        CANDIDATE_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        DATA_ARCHIVE_TOKEN: ${{ steps.dataset-reader.outputs.token }}
+    - name: Authorize private report storage
+      id: check-report-writer
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
+    - name: Retain diagnostics privately
+      if: ${{ always() && steps.check-report-writer.outcome == 'success' }}
+      env:
+        GH_TOKEN: ${{ steps.check-report-writer.outputs.token }}
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
