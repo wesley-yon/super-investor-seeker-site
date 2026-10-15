@@ -299,8 +299,6 @@ jobs:
     needs:
     - implementation
 'on':
-  schedule:
-  - cron: 23 4 * * *
   workflow_dispatch:
     inputs:
       rebuild_security_master:
