@@ -324,6 +324,14 @@ jobs:
           }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.28
     - name: Execute private step 30
+      if: success() && steps.publish_snapshot.outputs.dataset_id != '' && steps.publish_snapshot.outputs.site_changed == 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-28.outputs.token || steps.implementation-reader.outputs.token
+          }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.29
+    - name: Execute private step 31
       if: success() && steps.publish_snapshot.outputs.dataset_id != '' && steps.recent_filings.outputs.processed_accessions
         != '' && steps.recent_filings.outputs.processed_accessions != '0' && steps.recent_filings.outputs.remaining_due !=
         '' && steps.recent_filings.outputs.remaining_due != '0'
@@ -332,7 +340,7 @@ jobs:
         GH_REPO: ${{ github.repository }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-28.outputs.token || steps.implementation-reader.outputs.token
           }}
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.29
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.30
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
@@ -351,25 +359,6 @@ jobs:
       run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
 
         python .implementation/scripts/store_private_workflow_logs.py'
-  deploy-pages:
-    needs:
-    - implementation
-    - update
-    if: "${{ (needs.update.result == 'success' &&\n    needs.update.outputs.implementation_pin != '' &&\n    needs.update.outputs.release_tag\
-      \ != '' &&\n    needs.update.outputs.dataset_id != '' &&\n    needs.update.outputs.site_changed == 'true') && github.ref\
-      \ == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch') }}"
-    uses: ./.github/workflows/deploy-pages.yml
-    with:
-      release_tag: ${{ needs.update.outputs.release_tag }}
-      dataset_id: ${{ needs.update.outputs.dataset_id }}
-      implementation_pin: ${{ needs.implementation.outputs.pin }}
-    secrets: inherit
-    permissions:
-      actions: write
-      contents: read
-      deployments: read
-      pages: write
-      id-token: write
 'on':
   schedule:
   - cron: 23 11-23 * * 1-5

@@ -57,6 +57,11 @@ jobs:
       github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     environment: private-data
+    permissions:
+      actions: write
+      contents: read
+      deployments: read
+      pages: read
     concurrency:
       group: private-release-publication
       cancel-in-progress: false
@@ -265,6 +270,14 @@ jobs:
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-29.outputs.token || steps.implementation-reader.outputs.token
           }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.29
+    - name: Execute private step 31
+      if: success() && steps.publish_snapshot.outputs.dataset_id != '' && steps.publish_snapshot.outputs.site_changed == 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-29.outputs.token || steps.implementation-reader.outputs.token
+          }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step refresh-cusip-registry.rebuild_security_master.30
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
@@ -285,26 +298,6 @@ jobs:
         python .implementation/scripts/store_private_workflow_logs.py'
     needs:
     - implementation
-  deploy-pages:
-    needs:
-    - implementation
-    - rebuild_security_master
-    if: "${{ (needs.rebuild_security_master.result == 'success' &&\n    needs.rebuild_security_master.outputs.implementation_pin\
-      \ != '' &&\n    needs.rebuild_security_master.outputs.release_tag != '' &&\n    needs.rebuild_security_master.outputs.dataset_id\
-      \ != '' &&\n    needs.rebuild_security_master.outputs.site_changed == 'true') && github.ref == 'refs/heads/main' &&\
-      \ (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch') }}"
-    uses: ./.github/workflows/deploy-pages.yml
-    with:
-      release_tag: ${{ needs.rebuild_security_master.outputs.release_tag }}
-      dataset_id: ${{ needs.rebuild_security_master.outputs.dataset_id }}
-      implementation_pin: ${{ needs.implementation.outputs.pin }}
-    secrets: inherit
-    permissions:
-      actions: write
-      contents: read
-      deployments: read
-      pages: write
-      id-token: write
 'on':
   schedule:
   - cron: 23 4 * * *
