@@ -33,7 +33,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -76,7 +76,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -94,7 +94,7 @@ jobs:
       id: verified-implementation
     - name: Authenticate to the private data repository
       id: data-app-token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -114,7 +114,7 @@ jobs:
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
@@ -152,7 +152,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -175,7 +175,7 @@ jobs:
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.build.1
     - name: Authenticate to the private data repository
       id: data-app-token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -241,7 +241,7 @@ jobs:
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.build.90
     - name: Authorize private package retention
       id: package-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
@@ -263,7 +263,7 @@ jobs:
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
@@ -307,7 +307,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -325,7 +325,7 @@ jobs:
       id: verified-implementation
     - name: Authenticate to the private data repository
       id: data-app-token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -334,7 +334,7 @@ jobs:
         permission-contents: read
     - name: Authorize private implementation read
       id: implementation-refresh-2
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -365,7 +365,7 @@ jobs:
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
@@ -404,7 +404,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -429,7 +429,7 @@ jobs:
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deployment-identity.1
     - name: Authorize private receipt retention
       id: receipt-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
@@ -447,7 +447,7 @@ jobs:
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
@@ -485,7 +485,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -509,7 +509,7 @@ jobs:
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
