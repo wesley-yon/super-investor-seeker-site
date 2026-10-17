@@ -16,7 +16,7 @@ jobs:
   implementation:
     if: ${{ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
       }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: private-data
     timeout-minutes: 5
     permissions:
@@ -52,7 +52,7 @@ jobs:
     environment: private-data
     if: ${{ (github.ref == 'refs/heads/main') && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' ||
       github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read

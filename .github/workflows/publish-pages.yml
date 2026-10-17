@@ -17,7 +17,7 @@ jobs:
   implementation:
     if: ${{ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
       }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: private-data
     timeout-minutes: 5
     permissions:
@@ -53,7 +53,7 @@ jobs:
     if: ${{ (github.ref == 'refs/heads/main') && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' ||
       github.event_name == 'workflow_dispatch') }}
     environment: private-data
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -138,7 +138,7 @@ jobs:
     if: ${{ (github.ref == 'refs/heads/main' && needs.resolve.outputs.deploy_needed == 'true') && github.ref == 'refs/heads/main'
       && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch') }}
     environment: private-data
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: read
@@ -286,7 +286,7 @@ jobs:
     if: "${{ (github.ref == 'refs/heads/main' &&\n    needs.resolve.outputs.deploy_needed == 'true' &&\n    needs.build.result\
       \ == 'success') && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')\
       \ }}"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -388,7 +388,7 @@ jobs:
     if: "${{ (!cancelled() && github.ref == 'refs/heads/main' &&\n    needs.resolve.result == 'success' &&\n    (needs.resolve.outputs.deploy_needed\
       \ == 'false' ||\n     needs.deploy.result == 'success')) && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED\
       \ == 'true' || github.event_name == 'workflow_dispatch') }}"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -471,7 +471,7 @@ jobs:
     - deploy
     - deployment-identity
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.implementation.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       actions: write

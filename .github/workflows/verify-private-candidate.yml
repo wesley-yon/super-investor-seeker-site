@@ -26,7 +26,7 @@ env:
 jobs:
   implementation:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: private-data
     timeout-minutes: 5
     outputs:
@@ -59,7 +59,7 @@ jobs:
   validate:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
     needs: implementation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: private-data
     timeout-minutes: 90
     steps:
