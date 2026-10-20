@@ -14,12 +14,13 @@ except ImportError:
 RETIRED_WORKFLOWS = frozenset({
     'activate-insider-pilot.yml', 'refresh-insider-daily.yml',
     'maintain-insider-checkpoint.yml', 'verify-insider-checkpoint.yml',
+    'verify-private-candidate.yml',
 })
 WORKFLOWS = {
     'deploy-pages.yml', 'finalize-private-snapshots.yml',
     'keepalive.yml', 'publish-pages.yml',
     'refresh-cusip-registry.yml', 'update-data.yml', 'verify-environment-credentials.yml',
-    'publisher-checks.yml', 'rollback-pages.yml', 'verify-private-candidate.yml',
+    'publisher-checks.yml', 'rollback-pages.yml',
     'update-clock.yml', 'check-candidate-release.yml',
 }
 # These run without any private code, data, or deployment credential.
