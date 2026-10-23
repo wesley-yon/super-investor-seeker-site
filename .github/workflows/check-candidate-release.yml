@@ -43,7 +43,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -78,7 +78,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -96,7 +96,7 @@ jobs:
       id: verified-implementation
     - name: Authorize production dataset read
       id: dataset-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -117,7 +117,7 @@ jobs:
         DATA_ARCHIVE_TOKEN: ${{ steps.dataset-reader.outputs.token }}
     - name: Authorize private report storage
       id: check-report-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
