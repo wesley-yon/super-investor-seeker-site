@@ -21,7 +21,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -108,7 +108,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -125,7 +125,7 @@ jobs:
         SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
       id: verified-implementation
     - name: Set up Python
-      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
       with:
         python-version: '3.11'
     - name: Set up Node for the locked Wrangler
@@ -135,7 +135,7 @@ jobs:
         package-manager-cache: false
     - name: Authenticate to the retained packages
       id: package-reader
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -155,7 +155,7 @@ jobs:
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
