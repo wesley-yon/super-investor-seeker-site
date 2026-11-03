@@ -27,30 +27,35 @@ jobs:
         \ only when\nnone is running or queued.\n\nThe publisher generator embeds this file verbatim as the job's script.\
         \ It uses\nthe standard library and the job's own token; it reads no private code or data.\n\"\"\"\nfrom __future__\
         \ import annotations\n\nfrom datetime import datetime, timedelta, timezone\nimport json\nimport os\nimport time\n\
-        import urllib.error\nimport urllib.request\n\n# The update window of update-data.yml's own schedule: 7am-7pm\n# America/New_York\
-        \ in both EST and EDT, Monday to Friday. These UTC hours never\n# cross a New York date boundary, so the UTC weekday\
-        \ is the New York weekday.\nSLOT_MINUTE = 23\nSLOT_HOURS = range(11, 24)\nSLOT_WEEKDAYS = range(0, 5)\n# The nightly\
-        \ security-master rebuild of refresh-cusip-registry.yml runs every\n# day at 04:23 UTC (12:23am New York in EDT, 11:23pm\
-        \ in EST). Started on time it\n# finishes hours before the first update slot; delivered late by GitHub it was\n# still\
-        \ holding the data lock when that slot came. The publisher's copy of the\n# rebuild workflow therefore has no schedule\
-        \ of its own: this clock starts it.\nREBUILD_HOUR = 4\n# A hosted job may run six hours. Longer gaps are crossed in\
-        \ several runs.\nMAX_WAIT = timedelta(hours=5)\nUPDATE_WORKFLOW = 'update-data.yml'\nREBUILD_WORKFLOW = 'refresh-cusip-registry.yml'\n\
-        CLOCK_WORKFLOW = 'update-clock.yml'\nEVENTS = {'update': UPDATE_WORKFLOW, 'rebuild': REBUILD_WORKFLOW}\nATTEMPTS =\
-        \ 4\n# A clock run requests its successor seconds before it ends. A backup run that\n# finds no clock looks again\
-        \ after this long, so a handover is not mistaken for\n# a stopped clock.\nHANDOVER_SECONDS = 60\n\n\ndef next_slot(now:\
-        \ datetime) -> datetime:\n    \"\"\"Return the first update slot strictly after now.\"\"\"\n    candidate = now.replace(minute=SLOT_MINUTE,\
-        \ second=0, microsecond=0)\n    if candidate <= now:\n        candidate += timedelta(hours=1)\n    while candidate.hour\
-        \ not in SLOT_HOURS or candidate.weekday() not in SLOT_WEEKDAYS:\n        candidate += timedelta(hours=1)\n    return\
-        \ candidate\n\n\ndef next_rebuild(now: datetime) -> datetime:\n    \"\"\"Return the first nightly rebuild slot strictly\
-        \ after now.\"\"\"\n    candidate = now.replace(hour=REBUILD_HOUR, minute=SLOT_MINUTE, second=0, microsecond=0)\n\
-        \    if candidate <= now:\n        candidate += timedelta(days=1)\n    return candidate\n\n\ndef next_event(now: datetime)\
-        \ -> tuple[datetime, str]:\n    \"\"\"Return the first slot strictly after now and which workflow it starts.\"\"\"\
-        \n    update, rebuild = next_slot(now), next_rebuild(now)\n    if rebuild < update:\n        return rebuild, 'rebuild'\n\
-        \    return update, 'update'\n\n\ndef plan(now: datetime) -> tuple[datetime, str]:\n    \"\"\"Return when this run\
-        \ should wake and which event is then due ('' for none).\"\"\"\n    slot, event = next_event(now)\n    if slot - now\
-        \ > MAX_WAIT:\n        return now + MAX_WAIT, ''\n    return slot, event\n\n\ndef request(method: str, path: str,\
-        \ body: dict | None = None):\n    repository, token = os.environ['GITHUB_REPOSITORY'], os.environ['GH_TOKEN']\n  \
-        \  call = urllib.request.Request(\n        f'https://api.github.com/repos/{repository}/actions/workflows/{path}',\
+        import urllib.error\nimport urllib.request\nfrom zoneinfo import ZoneInfo\n\n# The update slots: 7:23am to 7:23pm\
+        \ America/New_York, Monday to Friday, in\n# both EST and EDT. They are found in New York time: fixed UTC hours (11-23)\n\
+        # put the window at 6:23am-6:23pm all winter and dropped the 7:23pm update\n# (November 2026). New York's offset is\
+        \ a whole number of hours, so every slot\n# is also at :23 in UTC; in EST the 7:23pm slot is 00:23 UTC the next UTC\
+        \ day.\n# The runner's time zone database answers, as it does for update-data.yml's\n# `TZ=America/New_York date`\
+        \ window check.\nNEW_YORK = ZoneInfo('America/New_York')\nSLOT_MINUTE = 23\nSLOT_HOURS = range(7, 20)\nSLOT_WEEKDAYS\
+        \ = range(0, 5)\n# The nightly security-master rebuild of refresh-cusip-registry.yml runs every\n# day at 04:23 UTC\
+        \ (12:23am New York in EDT, 11:23pm in EST). Started on time it\n# finishes hours before the first update slot; delivered\
+        \ late by GitHub it was\n# still holding the data lock when that slot came. The publisher's copy of the\n# rebuild\
+        \ workflow therefore has no schedule of its own: this clock starts it.\nREBUILD_HOUR = 4\n# A hosted job may run six\
+        \ hours. Longer gaps are crossed in several runs.\nMAX_WAIT = timedelta(hours=5)\nUPDATE_WORKFLOW = 'update-data.yml'\n\
+        REBUILD_WORKFLOW = 'refresh-cusip-registry.yml'\nCLOCK_WORKFLOW = 'update-clock.yml'\nEVENTS = {'update': UPDATE_WORKFLOW,\
+        \ 'rebuild': REBUILD_WORKFLOW}\nATTEMPTS = 4\n# A clock run requests its successor seconds before it ends. A backup\
+        \ run that\n# finds no clock looks again after this long, so a handover is not mistaken for\n# a stopped clock.\n\
+        HANDOVER_SECONDS = 60\n\n\ndef is_slot(moment: datetime) -> bool:\n    \"\"\"Whether a UTC time at :23 is an update\
+        \ slot in New York.\"\"\"\n    local = moment.astimezone(NEW_YORK)\n    return local.hour in SLOT_HOURS and local.weekday()\
+        \ in SLOT_WEEKDAYS\n\n\ndef next_slot(now: datetime) -> datetime:\n    \"\"\"Return the first update slot strictly\
+        \ after now (in UTC).\"\"\"\n    candidate = now.astimezone(timezone.utc).replace(minute=SLOT_MINUTE, second=0, microsecond=0)\n\
+        \    if candidate <= now:\n        candidate += timedelta(hours=1)\n    while not is_slot(candidate):\n        candidate\
+        \ += timedelta(hours=1)\n    return candidate\n\n\ndef next_rebuild(now: datetime) -> datetime:\n    \"\"\"Return\
+        \ the first nightly rebuild slot strictly after now.\"\"\"\n    candidate = now.replace(hour=REBUILD_HOUR, minute=SLOT_MINUTE,\
+        \ second=0, microsecond=0)\n    if candidate <= now:\n        candidate += timedelta(days=1)\n    return candidate\n\
+        \n\ndef next_event(now: datetime) -> tuple[datetime, str]:\n    \"\"\"Return the first slot strictly after now and\
+        \ which workflow it starts.\"\"\"\n    update, rebuild = next_slot(now), next_rebuild(now)\n    if rebuild < update:\n\
+        \        return rebuild, 'rebuild'\n    return update, 'update'\n\n\ndef plan(now: datetime) -> tuple[datetime, str]:\n\
+        \    \"\"\"Return when this run should wake and which event is then due ('' for none).\"\"\"\n    slot, event = next_event(now)\n\
+        \    if slot - now > MAX_WAIT:\n        return now + MAX_WAIT, ''\n    return slot, event\n\n\ndef request(method:\
+        \ str, path: str, body: dict | None = None):\n    repository, token = os.environ['GITHUB_REPOSITORY'], os.environ['GH_TOKEN']\n\
+        \    call = urllib.request.Request(\n        f'https://api.github.com/repos/{repository}/actions/workflows/{path}',\
         \ method=method,\n        data=None if body is None else json.dumps(body).encode(),\n        headers={'Authorization':\
         \ f'Bearer {token}', 'Accept': 'application/vnd.github+json',\n                 'X-GitHub-Api-Version': '2022-11-28'})\n\
         \    for attempt in range(1, ATTEMPTS + 1):\n        try:\n            with urllib.request.urlopen(call, timeout=30)\
