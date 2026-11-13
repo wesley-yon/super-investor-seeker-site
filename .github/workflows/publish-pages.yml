@@ -374,6 +374,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     outputs:
       page_url: ${{ steps.deployment.outputs.page_url }}
+      deploy_needed: ${{ steps.superseded-guard.outputs.deploy_needed }}
     steps:
     - name: Fetch public adapter
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -418,6 +419,7 @@ jobs:
         repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
         permission-contents: read
     - name: Execute private step 3
+      id: superseded-guard
       env:
         ALLOW_OLDER_RELEASE: ${{ needs.resolve.outputs.allow_older_release }}
         EXPECTED_DATASET_ID: ${{ needs.resolve.outputs.dataset_id }}
@@ -427,11 +429,13 @@ jobs:
           }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deploy.2
     - name: Deploy exact validated artifact
+      if: ${{ steps.superseded-guard.outputs.deploy_needed == 'true' }}
       id: deployment
       uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
       with:
         timeout: 600000
     - name: Execute private step 5
+      if: ${{ steps.superseded-guard.outputs.deploy_needed == 'true' }}
       env:
         EXPECTED_DATASET_ID: ${{ needs.resolve.outputs.dataset_id }}
         PAGE_URL: ${{ steps.deployment.outputs.page_url }}
@@ -462,8 +466,9 @@ jobs:
     - resolve
     - deploy
     if: "${{ (!cancelled() && github.ref == 'refs/heads/main' &&\n    needs.resolve.result == 'success' &&\n    (needs.resolve.outputs.deploy_needed\
-      \ == 'false' ||\n     needs.deploy.result == 'success')) && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED\
-      \ == 'true' || github.event_name == 'workflow_dispatch') }}"
+      \ == 'false' ||\n     (needs.deploy.result == 'success' &&\n      needs.deploy.outputs.deploy_needed == 'true'))) &&\
+      \ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')\
+      \ }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

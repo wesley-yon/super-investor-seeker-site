@@ -28,7 +28,7 @@ METADATA = {
     'migration_only': BOOLEAN, 'run_update': BOOLEAN, 'targeted_cik': BOOLEAN,
     'snapshot_changed': BOOLEAN, 'site_changed': BOOLEAN,
     'prepared_sha256': DIGEST, 'processed_accessions': r'[0-9]{1,10}',
-    'remaining_due': r'[0-9]{1,10}',
+    'remaining_due': r'[0-9]{1,10}', 'budget_exhausted': BOOLEAN,
 }
 
 
