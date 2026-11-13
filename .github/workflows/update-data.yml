@@ -300,7 +300,7 @@ jobs:
       env:
         SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         RECENT_13F_QUARTERS: ${{ inputs.filing_quarters || 4 }}
-        RECENT_13F_MAX_CIKS: '100'
+        RECENT_13F_MAX_CIKS: '250'
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.13
     - name: Execute private step 15
@@ -404,11 +404,14 @@ jobs:
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.29
     - name: Execute private step 31
       if: success() && steps.publish_snapshot.outputs.dataset_id != '' && steps.recent_filings.outputs.processed_accessions
-        != '' && steps.recent_filings.outputs.processed_accessions != '0' && steps.recent_filings.outputs.remaining_due !=
-        '' && steps.recent_filings.outputs.remaining_due != '0'
+        != ''
       env:
         GH_TOKEN: ${{ github.token }}
         GH_REPO: ${{ github.repository }}
+        SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        PRODUCTION_ENABLED: ${{ vars.PRODUCTION_ENABLED }}
+        PROCESSED_ACCESSIONS: ${{ steps.recent_filings.outputs.processed_accessions }}
+        BUDGET_EXHAUSTED: ${{ steps.recent_filings.outputs.budget_exhausted }}
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-28.outputs.token || steps.implementation-reader.outputs.token
           }}
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step update-data.update.30

@@ -86,9 +86,9 @@ jobs:
     needs:
     - implementation
     - publish
-    if: "${{ (github.ref == 'refs/heads/main' && vars.CLOUDFLARE_SITE_DEPLOY == 'true' &&\n    needs.publish.result == 'success'\
-      \ && needs.publish.outputs.deployment_id != '') && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true'\
-      \ || github.event_name == 'workflow_dispatch') }}"
+    if: "${{ (!cancelled() && github.ref == 'refs/heads/main' && vars.CLOUDFLARE_SITE_DEPLOY == 'true' &&\n    needs.publish.result\
+      \ != 'skipped' && needs.publish.outputs.deployment_id != '') && github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED\
+      \ == 'true' || github.event_name == 'workflow_dispatch') }}"
     concurrency:
       group: cloudflare-site
       cancel-in-progress: false
