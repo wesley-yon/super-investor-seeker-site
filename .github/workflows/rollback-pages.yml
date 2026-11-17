@@ -55,6 +55,10 @@ jobs:
   prepare:
     if: ${{ github.ref == 'refs/heads/main' && vars.PRODUCTION_ENABLED == 'false' }}
     needs: implementation
+    concurrency:
+      group: pages-identity
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-24.04
     environment: private-data
     timeout-minutes: 30
@@ -127,6 +131,10 @@ jobs:
     needs:
     - implementation
     - prepare
+    concurrency:
+      group: pages-identity
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-24.04
     environment:
       name: github-pages

@@ -1,6 +1,6 @@
 name: Finalize verified private snapshots
 concurrency:
-  group: pages-production
+  group: pages-identity
   cancel-in-progress: false
   queue: max
 env:
@@ -55,6 +55,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
+      actions: read
       contents: read
       deployments: read
       pages: read

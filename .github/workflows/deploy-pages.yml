@@ -79,6 +79,7 @@ jobs:
       implementation_pin: ${{ needs.implementation.outputs.pin }}
     secrets: inherit
     permissions:
+      actions: read
       contents: read
       deployments: read
       pages: read
