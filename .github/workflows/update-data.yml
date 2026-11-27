@@ -534,8 +534,6 @@ jobs:
 
         python .implementation/scripts/store_private_workflow_logs.py'
 'on':
-  schedule:
-  - cron: 23 11-23 * * 1-5
   workflow_dispatch:
     inputs:
       full_rebuild:
