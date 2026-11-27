@@ -200,8 +200,6 @@ jobs:
   push:
     branches:
     - main
-  schedule:
-  - cron: 7,22,37,52 * * * *
 env:
   SIS_PUBLISHER_SHA: ${{ github.sha }}
   SIS_PUBLISHER_REPOSITORY: ${{ github.repository }}

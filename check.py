@@ -15,16 +15,17 @@ RETIRED_WORKFLOWS = frozenset({
     'activate-insider-pilot.yml', 'refresh-insider-daily.yml',
     'maintain-insider-checkpoint.yml', 'verify-insider-checkpoint.yml',
     'verify-private-candidate.yml',
+    'update-clock.yml', 'keepalive.yml',
 })
 WORKFLOWS = {
     'deploy-pages.yml', 'finalize-private-snapshots.yml',
-    'keepalive.yml', 'publish-pages.yml',
+    'publish-pages.yml',
     'refresh-cusip-registry.yml', 'update-data.yml', 'verify-environment-credentials.yml',
     'publisher-checks.yml', 'rollback-pages.yml',
-    'update-clock.yml', 'check-candidate-release.yml',
+    'check-candidate-release.yml',
 }
 # These run without any private code, data, or deployment credential.
-PUBLIC_ONLY_WORKFLOWS = frozenset({'publisher-checks.yml', 'update-clock.yml'})
+PUBLIC_ONLY_WORKFLOWS = frozenset({'publisher-checks.yml'})
 FILES = {'README.md', 'LICENSE', '.gitignore', 'bootstrap.py', 'check.py',
          'implementation-approval.json', 'requirements.txt', '.github/dependabot.yml',
          'tests/test_bootstrap.py'} | {'.github/workflows/' + name for name in WORKFLOWS}
