@@ -36,7 +36,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -73,7 +73,7 @@ jobs:
         persist-credentials: false
     - name: Authorize private implementation read
       id: implementation-reader
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
       with:
         client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
         private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
@@ -98,7 +98,7 @@ jobs:
         package-manager-cache: false
     - name: Authorize private recovery storage
       id: receipt-writer
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
@@ -113,7 +113,7 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_SITE_DEPLOY_TOKEN }}
     - name: Authorize private recovery storage
       id: recovery-report-writer
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
       with:
         client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
         private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
