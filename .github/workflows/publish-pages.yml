@@ -57,8 +57,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      deployments: read
-      pages: read
     outputs:
       implementation_pin: ${{ needs.implementation.outputs.pin }}
       release_tag: ${{ steps.target.outputs.release_tag }}
@@ -104,6 +102,7 @@ jobs:
     - name: Execute private step 6
       id: target
       env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_SITE_DEPLOY_TOKEN }}
         DATA_ARCHIVE_TOKEN: ${{ steps.data-app-token.outputs.token }}
         GH_TOKEN: ${{ steps.data-app-token.outputs.token }}
         PUBLIC_GITHUB_TOKEN: ${{ github.token }}
@@ -217,7 +216,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      pages: write
     steps:
     - name: Fetch public adapter
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -308,11 +306,6 @@ jobs:
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.build.13
       env:
         SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
-    - name: Execute private step 15
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.build.14
     - name: Complete private regression gates
       run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.build.90
     - name: Authorize private package retention
@@ -329,13 +322,6 @@ jobs:
       env:
         GH_TOKEN: ${{ steps.package-writer.outputs.token }}
         EXPECTED_RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
-    - name: Configure GitHub Pages
-      uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
-    - name: Upload bounded Pages artifact
-      uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
-      with:
-        path: ${{ env.ARTIFACT_DIR }}
-        include-hidden-files: true
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
@@ -366,19 +352,122 @@ jobs:
       group: pages-identity
       cancel-in-progress: false
       queue: max
+    environment: private-data
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
-      deployments: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     outputs:
-      page_url: ${{ steps.deployment.outputs.page_url }}
+      deployment_id: ${{ steps.deployment.outputs.deployment_id }}
       deploy_needed: ${{ steps.superseded-guard.outputs.deploy_needed }}
+    steps:
+    - name: Fetch public adapter
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        path: .publisher
+        persist-credentials: false
+    - name: Authorize private implementation read
+      id: implementation-reader
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Fetch pinned implementation
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode fetch --root "$GITHUB_WORKSPACE/.implementation"
+      env:
+        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
+          }}
+        SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+      id: verified-implementation
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: '3.11'
+    - name: Set up Node for the locked Wrangler
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+      with:
+        node-version: '22'
+        package-manager-cache: false
+    - name: Authenticate to the private data repository
+      id: data-app-token
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Authorize private implementation read
+      id: implementation-refresh-4
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      with:
+        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
+        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
+        permission-contents: read
+    - name: Execute private step 5
+      id: superseded-guard
+      env:
+        ALLOW_OLDER_RELEASE: ${{ needs.resolve.outputs.allow_older_release }}
+        EXPECTED_DATASET_ID: ${{ needs.resolve.outputs.dataset_id }}
+        EXPECTED_RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        GH_TOKEN: ${{ steps.data-app-token.outputs.token }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-4.outputs.token || steps.implementation-reader.outputs.token
+          }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deploy.4
+    - name: Execute private step 6
+      if: ${{ steps.superseded-guard.outputs.deploy_needed == 'true' }}
+      id: deployment
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_SITE_DEPLOY_TOKEN }}
+        EXPECTED_DATASET_ID: ${{ needs.resolve.outputs.dataset_id }}
+        EXPECTED_RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        GH_TOKEN: ${{ steps.data-app-token.outputs.token }}
+        PUBLIC_GITHUB_TOKEN: ${{ github.token }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-4.outputs.token || steps.implementation-reader.outputs.token
+          }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deploy.5
+    - name: Authorize private report storage
+      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
+      id: private-report-writer
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      with:
+        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: super-investor-seeker-data
+        permission-contents: write
+    - name: Retain diagnostics privately
+      if: ${{ always() && steps.private-report-writer.outcome == 'success' }}
+      env:
+        GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
+        SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
+      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
+
+        python .implementation/scripts/store_private_workflow_logs.py'
+  deployment-identity:
+    needs:
+    - implementation
+    - resolve
+    - deploy
+    if: "${{ (!cancelled() && github.ref == 'refs/heads/main' &&\n    needs.resolve.result == 'success' &&\n    (needs.resolve.outputs.deploy_needed\
+      \ == 'false' ||\n     (needs.deploy.result == 'success' &&\n      needs.deploy.outputs.deploy_needed == 'true'))) &&\
+      \ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')\
+      \ }}"
+    environment: private-data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      deployment_id: ${{ steps.receipt.outputs.deployment_id }}
     steps:
     - name: Fetch public adapter
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -413,122 +502,17 @@ jobs:
         owner: ${{ github.repository_owner }}
         repositories: super-investor-seeker-data
         permission-contents: read
-    - name: Authorize private implementation read
-      id: implementation-refresh-2
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
-      with:
-        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
-        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
-        owner: ${{ github.repository_owner }}
-        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
-        permission-contents: read
     - name: Execute private step 3
-      id: superseded-guard
+      id: receipt
       env:
-        ALLOW_OLDER_RELEASE: ${{ needs.resolve.outputs.allow_older_release }}
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_SITE_DEPLOY_TOKEN }}
+        DEPLOY_NEEDED: ${{ needs.resolve.outputs.deploy_needed }}
         EXPECTED_DATASET_ID: ${{ needs.resolve.outputs.dataset_id }}
         EXPECTED_RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
         GH_TOKEN: ${{ steps.data-app-token.outputs.token }}
-        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-2.outputs.token || steps.implementation-reader.outputs.token
-          }}
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deploy.2
-    - name: Deploy exact validated artifact
-      if: ${{ steps.superseded-guard.outputs.deploy_needed == 'true' }}
-      id: deployment
-      uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
-      with:
-        timeout: 600000
-    - name: Execute private step 5
-      if: ${{ steps.superseded-guard.outputs.deploy_needed == 'true' }}
-      env:
-        EXPECTED_DATASET_ID: ${{ needs.resolve.outputs.dataset_id }}
-        PAGE_URL: ${{ steps.deployment.outputs.page_url }}
-        SIS_CODE_READ_TOKEN: ${{ steps.implementation-refresh-2.outputs.token || steps.implementation-reader.outputs.token
-          }}
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deploy.4
-    - name: Authorize private report storage
-      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
-      id: private-report-writer
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
-      with:
-        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
-        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
-        owner: ${{ github.repository_owner }}
-        repositories: super-investor-seeker-data
-        permission-contents: write
-    - name: Retain diagnostics privately
-      if: ${{ always() && steps.private-report-writer.outcome == 'success' }}
-      env:
-        GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
-        SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
-      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
-
-        python .implementation/scripts/store_private_workflow_logs.py'
-  deployment-identity:
-    needs:
-    - implementation
-    - resolve
-    - deploy
-    if: "${{ (!cancelled() && github.ref == 'refs/heads/main' &&\n    needs.resolve.result == 'success' &&\n    (needs.resolve.outputs.deploy_needed\
-      \ == 'false' ||\n     (needs.deploy.result == 'success' &&\n      needs.deploy.outputs.deploy_needed == 'true'))) &&\
-      \ github.ref == 'refs/heads/main' && (vars.PRODUCTION_ENABLED == 'true' || github.event_name == 'workflow_dispatch')\
-      \ }}"
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      deployments: read
-    outputs:
-      deployment_id: ${{ steps.receipt.outputs.deployment_id }}
-    steps:
-    - name: Fetch public adapter
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      with:
-        ref: ${{ github.sha }}
-        path: .publisher
-        persist-credentials: false
-    - name: Authorize private implementation read
-      id: implementation-reader
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
-      with:
-        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
-        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
-        owner: ${{ github.repository_owner }}
-        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
-        permission-contents: read
-    - name: Fetch pinned implementation
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode fetch --root "$GITHUB_WORKSPACE/.implementation"
-      env:
-        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
-          }}
-        SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
-        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
-        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
-      id: verified-implementation
-    - name: Execute private step 2
-      id: receipt
-      env:
-        GH_TOKEN: ${{ github.token }}
-        DEPLOY_NEEDED: ${{ needs.resolve.outputs.deploy_needed }}
-        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deployment-identity.1
-    - name: Authorize private receipt retention
-      id: receipt-writer
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
-      with:
-        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
-        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
-        owner: ${{ github.repository_owner }}
-        repositories: super-investor-seeker-data
-        permission-contents: write
-    - name: Retain exact deployment receipt privately
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deployment-identity.90
-      env:
-        GH_TOKEN: ${{ steps.receipt-writer.outputs.token }}
         PUBLIC_GITHUB_TOKEN: ${{ github.token }}
-        DEPLOY_NEEDED: ${{ needs.resolve.outputs.deploy_needed }}
-        EXPECTED_DATASET_ID: ${{ needs.resolve.outputs.dataset_id }}
-        EXPECTED_RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
+      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.deployment-identity.2
     - name: Authorize private report storage
       if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
       id: private-report-writer
@@ -547,69 +531,6 @@ jobs:
       run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
 
         python .implementation/scripts/store_private_workflow_logs.py'
-    environment: private-data
-  cleanup-public-pages-artifacts:
-    needs:
-    - implementation
-    - resolve
-    - build
-    - deploy
-    - deployment-identity
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.implementation.result == 'success' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      actions: write
-      contents: read
-    steps:
-    - name: Fetch public adapter
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      with:
-        ref: ${{ github.sha }}
-        path: .publisher
-        persist-credentials: false
-    - name: Authorize private implementation read
-      id: implementation-reader
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
-      with:
-        client-id: ${{ vars.IMPLEMENTATION_READER_APP_CLIENT_ID }}
-        private-key: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
-        owner: ${{ github.repository_owner }}
-        repositories: ${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker' }}
-        permission-contents: read
-    - name: Fetch pinned implementation
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode fetch --root "$GITHUB_WORKSPACE/.implementation"
-      env:
-        SIS_IMPLEMENTATION_REPOSITORY: ${{ github.repository_owner }}/${{ vars.IMPLEMENTATION_REPOSITORY_NAME || 'super-investor-seeker'
-          }}
-        SIS_IMPLEMENTATION_PIN: ${{ needs.implementation.outputs.pin }}
-        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
-        SIS_PIN_PRIVATE_KEY: ${{ secrets.IMPLEMENTATION_READER_APP_PRIVATE_KEY }}
-      id: verified-implementation
-    - name: Execute private step 1
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SIS_CODE_READ_TOKEN: ${{ steps.implementation-reader.outputs.token }}
-      run: python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --root "$GITHUB_WORKSPACE/.implementation" --step publish-pages.cleanup-public-pages-artifacts.0
-    - name: Authorize private report storage
-      if: ${{ always() && steps.verified-implementation.outcome == 'success' }}
-      id: private-report-writer
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
-      with:
-        client-id: ${{ vars.DATA_ARCHIVE_APP_CLIENT_ID }}
-        private-key: ${{ secrets.DATA_ARCHIVE_APP_PRIVATE_KEY }}
-        owner: ${{ github.repository_owner }}
-        repositories: super-investor-seeker-data
-        permission-contents: write
-    - name: Retain diagnostics privately
-      if: ${{ always() && steps.private-report-writer.outcome == 'success' }}
-      env:
-        GH_TOKEN: ${{ steps.private-report-writer.outputs.token }}
-        SIS_REPORT_SUFFIX: ${{ strategy.job-index }}
-      run: 'python "$GITHUB_WORKSPACE/.publisher/bootstrap.py" --mode verify --root "$GITHUB_WORKSPACE/.implementation"
-
-        python .implementation/scripts/store_private_workflow_logs.py'
-    environment: private-data
 'on':
   workflow_call:
     inputs:
@@ -631,7 +552,7 @@ jobs:
         default: false
     outputs:
       page_url:
-        value: ${{ jobs.deploy.outputs.page_url }}
+        value: ${{ env.SIS_SITE_URL || 'https://secspotter.com/' }}
       deployment_id:
         value: ${{ jobs.deployment-identity.outputs.deployment_id }}
       implementation_pin:

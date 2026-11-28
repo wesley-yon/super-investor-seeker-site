@@ -57,8 +57,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      deployments: read
-      pages: read
     steps:
     - name: Fetch public adapter
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -96,6 +94,7 @@ jobs:
     - name: Execute private step 3
       env:
         ALLOW_OLDER_RELEASE: ${{ inputs.allow_older_release }}
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_SITE_DEPLOY_TOKEN }}
         EXPECTED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
         EXPECTED_DATASET_ID: ${{ inputs.dataset_id }}
         EXPECTED_RELEASE_TAG: ${{ inputs.release_tag }}
