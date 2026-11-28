@@ -58,6 +58,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      page_url: ${{ vars.PAGES_SITE_URL || 'https://secspotter.com/' }}
       implementation_pin: ${{ needs.implementation.outputs.pin }}
       release_tag: ${{ steps.target.outputs.release_tag }}
       dataset_id: ${{ steps.target.outputs.dataset_id }}
@@ -552,7 +553,7 @@ jobs:
         default: false
     outputs:
       page_url:
-        value: ${{ env.SIS_SITE_URL || 'https://secspotter.com/' }}
+        value: ${{ jobs.resolve.outputs.page_url }}
       deployment_id:
         value: ${{ jobs.deployment-identity.outputs.deployment_id }}
       implementation_pin:
